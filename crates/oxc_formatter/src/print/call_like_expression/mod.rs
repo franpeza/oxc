@@ -5,12 +5,12 @@ use oxc_span::GetSpan;
 
 use crate::{
     ast_nodes::AstNode,
-    formatter::{TailwindContextEntry, prelude::*, trivia::FormatTrailingComments},
+    formatter::{prelude::*, trivia::FormatTrailingComments},
     print::arrow_function_expression::is_multiline_template_starting_on_same_line,
     utils::{
         call_expression::is_test_call_expression,
         format_node_without_trailing_comments::FormatNodeWithoutTrailingComments,
-        member_chain::MemberChain, tailwindcss::is_tailwind_function_call,
+        member_chain::MemberChain, tailwindcss::class_function_context,
     },
     write,
 };
@@ -25,24 +25,22 @@ impl<'a> FormatWrite<'a> for AstNode<'a, CallExpression<'a>> {
         let arguments = self.arguments();
         let optional = self.optional();
 
-        // Check if this is a Tailwind function call (e.g., clsx, cn, tw)
-        let is_tailwind_call = f
-            .options()
-            .sort_tailwindcss
-            .as_ref()
-            .is_some_and(|opts| is_tailwind_function_call(&self.callee, opts));
+        // Check if this is a class-context function call (e.g., clsx, cn, tw)
+        // for Tailwind sorting and/or class wrapping
+        let tailwind_call_ctx = class_function_context(&self.callee, f.options());
 
         // For nested non-Tailwind calls inside a Tailwind context, disable sorting
         // to prevent sorting strings inside the nested call's arguments.
         // (e.g., `classNames("a", x.includes("\n") ? "b" : "c")` - don't sort "\n")
-        let was_disabled =
-            if !is_tailwind_call && let Some(ctx) = f.context_mut().tailwind_context_mut() {
-                let was = ctx.disabled;
-                ctx.disabled = true;
-                Some(was)
-            } else {
-                None
-            };
+        let was_disabled = if tailwind_call_ctx.is_none()
+            && let Some(ctx) = f.context_mut().tailwind_context_mut()
+        {
+            let was = ctx.disabled;
+            ctx.disabled = true;
+            Some(was)
+        } else {
+            None
+        };
 
         let is_template_literal_single_arg = arguments.len() == 1
             && arguments.first().unwrap().as_expression().is_some_and(|expr| {
@@ -91,25 +89,16 @@ impl<'a> FormatWrite<'a> for AstNode<'a, CallExpression<'a>> {
                 }
                 write!(f, [optional.then_some("?."), type_arguments]);
 
-                // If this IS a Tailwind function call, push the Tailwind context
-                let tailwind_ctx_to_push = if is_tailwind_call {
-                    f.options()
-                        .sort_tailwindcss
-                        .as_ref()
-                        .map(|opts| TailwindContextEntry::new(opts.preserve_whitespace))
-                } else {
-                    None
-                };
-
-                // Push Tailwind context before formatting arguments
-                if let Some(ctx) = tailwind_ctx_to_push {
+                // If this IS a class-context call, push the Tailwind context
+                // before formatting arguments
+                if let Some(ctx) = tailwind_call_ctx {
                     f.context_mut().push_tailwind_context(ctx);
                 }
 
                 write!(f, arguments);
 
                 // Pop Tailwind context after formatting
-                if tailwind_ctx_to_push.is_some() {
+                if tailwind_call_ctx.is_some() {
                     f.context_mut().pop_tailwind_context();
                 }
             });

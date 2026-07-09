@@ -89,6 +89,12 @@ pub struct JsFormatOptions {
     /// When enabled, JSDoc comments will be normalized and reformatted.
     /// Defaults to None (disabled).
     pub jsdoc: Option<JsdocOptions>,
+
+    /// Wrap long class strings (JSX class/className attributes and template
+    /// literals in configured class contexts) across multiple lines to fit
+    /// the print width, like `prettier-plugin-classnames`.
+    /// Defaults to None (disabled).
+    pub wrap_class_names: Option<WrapClassNamesOptions>,
 }
 
 /// How to format JSDoc comment blocks: single-line, multi-line, or preserve original.
@@ -199,6 +205,24 @@ pub struct SortTailwindcssOptions {
     pub preserve_whitespace: bool,
 }
 
+/// Class-string wrapping options (`prettier-plugin-classnames` equivalent).
+///
+/// Wrapping is independent of Tailwind sorting: it reuses the same class
+/// collection pipeline, but works with or without `sort_tailwindcss`.
+#[derive(Debug, Default, Clone)]
+pub struct WrapClassNamesOptions {
+    /// List of additional attributes to wrap (beyond `class` and `className`).
+    ///
+    /// Example: `["myClassProp"]`
+    /// Default: `[]`
+    pub attributes: Vec<String>,
+    /// List of function/tag names whose template literals contain class strings.
+    ///
+    /// Example: `["clsx", "cn", "tw"]`
+    /// Default: `[]`
+    pub functions: Vec<String>,
+}
+
 impl JsFormatOptions {
     pub fn new() -> Self {
         Self {
@@ -223,6 +247,7 @@ impl JsFormatOptions {
             sort_imports: None,
             sort_tailwindcss: None,
             jsdoc: None,
+            wrap_class_names: None,
         }
     }
 }
@@ -273,7 +298,8 @@ impl fmt::Display for JsFormatOptions {
         writeln!(f, "Embedded language formatting: {}", self.embedded_language_formatting)?;
         writeln!(f, "Sort imports: {:?}", self.sort_imports)?;
         writeln!(f, "Sort tailwindcss: {:?}", self.sort_tailwindcss)?;
-        writeln!(f, "JSDoc: {:?}", self.jsdoc)
+        writeln!(f, "JSDoc: {:?}", self.jsdoc)?;
+        writeln!(f, "Wrap class names: {:?}", self.wrap_class_names)
     }
 }
 

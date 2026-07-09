@@ -11,9 +11,11 @@ use oxc_ast::ast::*;
 use oxc_span::GetSpan;
 
 use crate::{
-    Buffer, SortTailwindcssOptions,
+    Buffer,
     ast_nodes::{AstNode, AstNodes},
+    best_fitting,
     formatter::{FormatElement, TailwindContextEntry, prelude::*},
+    options::JsFormatOptions,
     write,
 };
 
@@ -44,14 +46,14 @@ pub fn tailwind_context_for_string_literal<'a>(
     })
 }
 
-/// Checks if a JSX attribute is a Tailwind class attribute.
+/// Checks if a JSX attribute is a class attribute.
 ///
 /// Returns `true` for:
 /// - `class` and `className` (default attributes)
-/// - Custom attributes specified in `attributes` option
+/// - Custom attributes specified in the feature's `attributes` option
 pub fn is_tailwind_jsx_attribute(
     attr_name: &JSXAttributeName<'_>,
-    options: &SortTailwindcssOptions,
+    extra_attributes: &[String],
 ) -> bool {
     let JSXAttributeName::Identifier(ident) = attr_name else {
         return false;
@@ -64,7 +66,51 @@ pub fn is_tailwind_jsx_attribute(
     }
 
     // Custom attributes from options
-    options.attributes.iter().any(|a| a == name)
+    extra_attributes.iter().any(|a| a == name)
+}
+
+/// Builds the class context entry for a JSX attribute, honoring both
+/// `sort_tailwindcss` and `wrap_class_names`. Returns `None` when neither
+/// feature targets the attribute.
+pub fn class_attribute_context(
+    attr_name: &JSXAttributeName<'_>,
+    options: &JsFormatOptions,
+) -> Option<TailwindContextEntry> {
+    let sort = options
+        .sort_tailwindcss
+        .as_ref()
+        .filter(|opts| is_tailwind_jsx_attribute(attr_name, &opts.attributes));
+    let wrap = options
+        .wrap_class_names
+        .as_ref()
+        .is_some_and(|opts| is_tailwind_jsx_attribute(attr_name, &opts.attributes));
+    if sort.is_none() && !wrap {
+        return None;
+    }
+    let preserve_whitespace = sort.is_some_and(|opts| opts.preserve_whitespace);
+    Some(TailwindContextEntry::new(preserve_whitespace).with_wrap(wrap).with_sort(sort.is_some()))
+}
+
+/// Builds the class context entry for a call expression / tagged template,
+/// honoring both `sort_tailwindcss` and `wrap_class_names` function lists.
+/// Returns `None` when neither feature targets the callee.
+pub fn class_function_context(
+    callee: &Expression<'_>,
+    options: &JsFormatOptions,
+) -> Option<TailwindContextEntry> {
+    let sort = options
+        .sort_tailwindcss
+        .as_ref()
+        .filter(|opts| is_tailwind_function_call(callee, &opts.functions));
+    let wrap = options
+        .wrap_class_names
+        .as_ref()
+        .is_some_and(|opts| is_tailwind_function_call(callee, &opts.functions));
+    if sort.is_none() && !wrap {
+        return None;
+    }
+    let preserve_whitespace = sort.is_some_and(|opts| opts.preserve_whitespace);
+    Some(TailwindContextEntry::new(preserve_whitespace).with_wrap(wrap).with_sort(sort.is_some()))
 }
 
 /// Checks if a callee expression is a Tailwind function.
@@ -79,11 +125,8 @@ pub fn is_tailwind_jsx_attribute(
 /// - `foo().clsx(...)` - chained calls
 ///
 /// Based on [prettier-plugin-tailwindcss's `isSortableExpression`](https://github.com/tailwindlabs/prettier-plugin-tailwindcss/blob/28beb4e008b913414562addec4abb8ab261f3828/src/index.ts#L584-L605).
-pub fn is_tailwind_function_call(
-    callee: &Expression<'_>,
-    options: &SortTailwindcssOptions,
-) -> bool {
-    if options.functions.is_empty() {
+pub fn is_tailwind_function_call(callee: &Expression<'_>, functions: &[String]) -> bool {
+    if functions.is_empty() {
         return false;
     }
 
@@ -102,7 +145,7 @@ pub fn is_tailwind_function_call(
                 node = &member.object;
             }
             Expression::Identifier(ident) => {
-                return options.functions.iter().any(|f| f == ident.name.as_str());
+                return functions.iter().any(|f| f == ident.name.as_str());
             }
             _ => return false,
         }
@@ -225,6 +268,82 @@ where
 // Write Functions
 // ============================================================================
 
+/// Writes a class marker element, recording on the context when a wrapping
+/// marker was emitted (so `format()` runs the wrap-expansion transform).
+fn write_class_marker(f: &mut JsFormatter<'_, '_>, index: usize, wrap: bool) {
+    if wrap {
+        f.context_mut().set_wrap_markers_emitted();
+    }
+    f.write_element(FormatElement::TailwindClass { index, wrap });
+}
+
+/// Content to register for a class marker.
+///
+/// In wrapping contexts, whitespace runs (including newlines left by a
+/// previous wrap) collapse to single spaces so the flat form is always a
+/// legal single-line string — the identity "sort" path returns content
+/// verbatim, unlike the real sorter which re-joins with spaces.
+fn register_class_content(trimmed: &str, ctx: TailwindContextEntry) -> String {
+    if ctx.wrap && trimmed.as_bytes().iter().any(|b| b.is_ascii_whitespace() && *b != b' ') {
+        let mut out = String::with_capacity(trimmed.len());
+        for class in trimmed.split_ascii_whitespace() {
+            if !out.is_empty() {
+                out.push(' ');
+            }
+            out.push_str(class);
+        }
+        out
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Whether a class string's content can safely swap delimiters
+/// (quote <-> backtick) without any re-escaping analysis.
+///
+/// Backslashes rule out escape sequences, backticks and `${` rule out
+/// template collisions. Real-world class lists contain none of these.
+fn is_convertible_class_content(content: &str) -> bool {
+    !content.contains(['`', '\\']) && !content.contains("${")
+}
+
+/// Writes a delimiter-converting class string: a `best_fitting` pair of
+/// a flat quoted string and a backtick template whose classes wrap to the
+/// print width. The printer picks the quoted form whenever it fits, so
+/// `` `a b` `` normalizes to `"a b"` and `"long ..."` becomes a wrapped
+/// template — matching prettier-plugin-classnames' delimiter conversion.
+fn write_convertible_class_string(
+    quote: &'static str,
+    index: usize,
+    leading_space: bool,
+    trailing_space: bool,
+    f: &mut JsFormatter<'_, '_>,
+) {
+    let flat = format_with(move |f| {
+        write!(f, quote);
+        if leading_space {
+            write!(f, text(" "));
+        }
+        f.write_element(FormatElement::TailwindClass { index, wrap: false });
+        if trailing_space {
+            write!(f, text(" "));
+        }
+        write!(f, quote);
+    });
+    let wrapped = format_with(move |f| {
+        write!(f, "`");
+        if leading_space {
+            write!(f, text(" "));
+        }
+        write_class_marker(f, index, true);
+        if trailing_space {
+            write!(f, text(" "));
+        }
+        write!(f, "`");
+    });
+    write!(f, [best_fitting!(flat, wrapped)]);
+}
+
 /// Writes a string literal with Tailwind class sorting.
 ///
 /// Handles whitespace based on context:
@@ -257,14 +376,13 @@ pub fn write_tailwind_string_literal<'a>(
         _ => unreachable!("Unexpected quote character in string literal"),
     };
 
-    write!(f, quote);
-
     // At least three characters: opening quote, content, closing quote
     let content = &normalized_string[1..normalized_string.len() - 1];
 
     if ctx.preserve_whitespace {
+        write!(f, quote);
         let index = f.context_mut().add_tailwind_class(content.to_string());
-        f.write_element(FormatElement::TailwindClass(index));
+        f.write_element(FormatElement::TailwindClass { index, wrap: false });
         write!(f, quote);
         return;
     }
@@ -273,6 +391,7 @@ pub fn write_tailwind_string_literal<'a>(
 
     // Whitespace-only → normalize to single space
     if trimmed.is_empty() {
+        write!(f, quote);
         if !content.is_empty() {
             write!(f, text(" "));
         }
@@ -280,24 +399,118 @@ pub fn write_tailwind_string_literal<'a>(
         return;
     }
 
+    let is_jsx_attribute = matches!(string_literal.parent(), AstNodes::JSXAttribute(_));
+
     let collapse = can_collapse_whitespace(string_literal.span, string_literal.ancestors(), f);
     let has_leading_ws = content.starts_with(|c: char| c.is_ascii_whitespace());
     let has_trailing_ws = content.ends_with(|c: char| c.is_ascii_whitespace());
+    // Sorting trims boundary whitespace (tailwind plugin behavior); a
+    // wrap-only context preserves it in expression positions, matching
+    // prettier-plugin-classnames. JSX attribute values always trim.
+    let preserve_boundary = !ctx.sort && !is_jsx_attribute;
+    let leading_space = has_leading_ws && (!collapse.start || preserve_boundary);
+    let trailing_space = has_trailing_ws && (!collapse.end || preserve_boundary);
+
+    // Wrapping in place is only legal where the string may contain literal
+    // newlines: JSX attribute values (JSXString grammar). Elsewhere (e.g. a
+    // `clsx("...")` argument) the string converts to a backtick template
+    // when — and only when — it has to wrap (`best_fitting` keeps the quoted
+    // form whenever it fits on one line).
+    let index = f.context_mut().add_tailwind_class(register_class_content(trimmed, ctx));
+
+    if ctx.wrap && !is_jsx_attribute && is_convertible_class_content(content) {
+        write_convertible_class_string(quote, index, leading_space, trailing_space, f);
+        return;
+    }
+
+    write!(f, quote);
 
     // Leading space
-    if has_leading_ws && !collapse.start {
+    if leading_space {
         write!(f, text(" "));
     }
 
     // Sorted content
-    let index = f.context_mut().add_tailwind_class(trimmed.to_string());
-    f.write_element(FormatElement::TailwindClass(index));
+    write_class_marker(f, index, ctx.wrap && is_jsx_attribute);
 
     // Trailing space
-    if has_trailing_ws && !collapse.end {
+    if trailing_space {
         write!(f, text(" "));
     }
     write!(f, quote);
+}
+
+/// Whether a JSX expression container holds a string literal that
+/// `write_tailwind_string_literal` will emit as a delimiter-converting
+/// `best_fitting` (quoted vs. wrapped backtick template).
+///
+/// Such containers hug their braces like template literals do
+/// (`className={\`...\`}`), since the wrapped form IS a template.
+pub fn is_wrap_convertible_string_container(
+    container: &JSXExpressionContainer<'_>,
+    f: &JsFormatter<'_, '_>,
+) -> bool {
+    let JSXExpression::StringLiteral(string) = &container.expression else {
+        return false;
+    };
+    let Some(ctx) = f.context().tailwind_context() else {
+        return false;
+    };
+    if !ctx.wrap || ctx.disabled || ctx.preserve_whitespace {
+        return false;
+    }
+    let text = f.source_text().text_for(string.as_ref());
+    text.as_bytes().iter().any(u8::is_ascii_whitespace)
+        && is_convertible_class_content(&text[1..text.len() - 1])
+}
+
+/// Delimiter conversion for a whole template literal in a wrapping class
+/// context (`wrap_class_names`): an untagged, expression-free template whose
+/// content is a plain class list prints as a `best_fitting` pair — a quoted
+/// string when it fits on one line, a wrapped backtick template otherwise.
+///
+/// Returns `false` (writing nothing) when the template is not eligible, so
+/// the caller falls through to the regular template formatting.
+pub fn try_wrap_convert_template<'a>(
+    template: &AstNode<'a, TemplateLiteral<'a>>,
+    f: &mut JsFormatter<'_, 'a>,
+) -> bool {
+    let Some(ctx) = f.context().tailwind_context().copied() else {
+        return false;
+    };
+    if !ctx.wrap || ctx.disabled || ctx.preserve_whitespace {
+        return false;
+    }
+    if !template.expressions.is_empty() || template.quasis.len() != 1 {
+        return false;
+    }
+
+    let content = template.quasis[0].value.raw.as_str();
+    // Multiple classes only (single class strings keep their source form),
+    // and the quoted variant must need no re-escaping analysis at all.
+    if !content.as_bytes().iter().any(u8::is_ascii_whitespace) {
+        return false;
+    }
+    if !is_convertible_class_content(content) || content.contains(['"', '\'']) {
+        return false;
+    }
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let collapse = can_collapse_whitespace(template.span, template.ancestors(), f);
+    // Wrap-only contexts preserve boundary whitespace (see
+    // `write_tailwind_string_literal`); sorting contexts trim it.
+    let leading_space =
+        content.starts_with(|c: char| c.is_ascii_whitespace()) && (!collapse.start || !ctx.sort);
+    let trailing_space =
+        content.ends_with(|c: char| c.is_ascii_whitespace()) && (!collapse.end || !ctx.sort);
+
+    let quote = f.options().quote_style.as_str();
+    let index = f.context_mut().add_tailwind_class(register_class_content(trimmed, ctx));
+    write_convertible_class_string(quote, index, leading_space, trailing_space, f);
+    true
 }
 
 /// Writes a template element (quasi) with Tailwind class sorting.
@@ -328,7 +541,7 @@ pub fn write_tailwind_template_element<'a>(
 
     if ctx.preserve_whitespace {
         let index = f.context_mut().add_tailwind_class(content.to_string());
-        f.write_element(FormatElement::TailwindClass(index));
+        f.write_element(FormatElement::TailwindClass { index, wrap: false });
         return;
     }
 
@@ -365,8 +578,11 @@ pub fn write_tailwind_template_element<'a>(
             write!(f, text(" "));
         }
 
-        let index = f.context_mut().add_tailwind_class(trimmed.to_string());
-        f.write_element(FormatElement::TailwindClass(index));
+        // Template literals may contain literal newlines, so the sortable
+        // middle section can wrap; the boundary prefix/suffix and the
+        // separating spaces stay as literal text outside the marker.
+        let index = f.context_mut().add_tailwind_class(register_class_content(trimmed, ctx));
+        write_class_marker(f, index, ctx.wrap);
 
         // Trailing space: required if not at end of template, or if binary context requires it
         let need_trailing = !is_last || !suffix.is_empty() || (has_trailing_ws && !collapse.end);

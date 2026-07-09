@@ -346,7 +346,16 @@ impl<'a> Printer<'a> {
                 }
                 stack.pop(tag.kind())?;
             }
-            FormatElement::TailwindClass(index) => {
+            FormatElement::TailwindClass { index, wrap } => {
+                // A `wrap: true` marker must have been expanded into a `fill`
+                // by the consumer's post-sort IR transform; reaching the
+                // printer means that transform was skipped. Output degrades
+                // gracefully to the unwrapped single-line form.
+                debug_assert!(
+                    !wrap,
+                    "TailwindClass {{ index: {index}, wrap: true }} reached the printer — \
+                     the wrap-expansion IR transform must run before printing",
+                );
                 let text = self.state.sorted_tailwind_classes.get(*index);
                 // A dangling index silently DELETES the class list from the
                 // output, so fail loudly in debug builds instead.
@@ -1302,7 +1311,7 @@ impl<'a, 'print> FitsMeasurer<'a, 'print> {
                 }
                 self.stack.pop(tag.kind())?;
             }
-            FormatElement::TailwindClass(index) => {
+            FormatElement::TailwindClass { index, .. } => {
                 if let Some(text) = self.state.sorted_tailwind_classes.get(*index) {
                     let width = TextWidth::from_text(text, self.options().indent_width);
                     return Ok(self.fits_text(Text::Text { text, width }));

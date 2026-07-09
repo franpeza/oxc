@@ -259,6 +259,31 @@ pub struct FormatConfig {
     #[serde(alias = "experimentalTailwindcss")]
     pub sort_tailwindcss: Option<SortTailwindcssUserConfig>,
 
+    /// Wrap long class strings across multiple lines to fit the print width.
+    ///
+    /// Like [prettier-plugin-classnames](https://github.com/ony3000/prettier-plugin-classnames):
+    /// when a class string (JSX `class`/`className` attribute, or a template literal
+    /// in a configured function/tag context) exceeds the print width, its classes
+    /// wrap onto continuation lines indented one level.
+    ///
+    /// Works independently of `sortTailwindcss`; when both are enabled,
+    /// classes are sorted first and then wrapped.
+    ///
+    /// In expression positions the delimiter converts both ways, like the
+    /// plugin: a plain string (e.g. `clsx("...")`) becomes a backtick
+    /// template when — and only when — it has to wrap, and an expression-free
+    /// template normalizes back to a quoted string when it fits on one line.
+    /// JSX attribute values wrap in place (their strings may contain literal
+    /// newlines) and tagged templates keep their backticks.
+    /// Strings covered by `sortTailwindcss.preserveWhitespace` are not wrapped.
+    ///
+    /// Pass `true` or an object to enable with defaults, or omit/set `false` to disable.
+    ///
+    /// - Languages: JS, JSX, TS, TSX
+    /// - Default: Disabled
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wrap_class_names: Option<WrapClassNamesUserConfig>,
+
     /// Enable JSDoc comment formatting.
     ///
     /// When enabled, JSDoc comments are normalized and reformatted:
@@ -740,6 +765,46 @@ pub struct SortTailwindcssConfig {
     /// - Default: `false`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preserve_duplicates: Option<bool>,
+}
+
+// ---
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(untagged)]
+pub enum WrapClassNamesUserConfig {
+    Bool(bool),
+    Object(WrapClassNamesConfig),
+}
+
+impl WrapClassNamesUserConfig {
+    pub fn into_config(self) -> Option<WrapClassNamesConfig> {
+        match self {
+            Self::Bool(true) => Some(WrapClassNamesConfig::default()),
+            Self::Bool(false) => None,
+            Self::Object(config) => Some(config),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WrapClassNamesConfig {
+    /// List of additional attributes to wrap beyond `class` and `className` (exact match).
+    ///
+    /// NOTE: Regex patterns are not yet supported.
+    ///
+    /// - Default: `[]`
+    /// - Example: `["myClassProp"]`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<Vec<String>>,
+    /// List of function/tag names whose template literals contain class strings (exact match).
+    ///
+    /// NOTE: Regex patterns are not yet supported.
+    ///
+    /// - Default: `[]`
+    /// - Example: `["clsx", "cn", "tw"]`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub functions: Option<Vec<String>>,
 }
 
 // ---

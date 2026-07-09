@@ -1,5 +1,9 @@
 //! This module contains IR transforms for sorting and aesthetic features.
-//! Currently, it only includes import sorting (`sort_imports_chunk`).
+//! Currently, it only includes import sorting (`sort_imports_chunk`);
+//! class-string wrapping (`wrap_class_names`) uses the core-provided
+//! `oxc_formatter_core::expand_wrap_markers` post-sort pass instead
+//! (invoked from `formatter::format`), since it must rebuild `Interned` /
+//! `BestFitting` payloads whose constructors are core-private.
 //!
 //! Several approaches were considered:
 //! - 1. Sort at the AST level.

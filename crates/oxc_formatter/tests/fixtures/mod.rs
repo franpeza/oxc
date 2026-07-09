@@ -3,7 +3,7 @@ use std::path::Path;
 use oxc_allocator::Allocator;
 use oxc_formatter::{
     ArrowParentheses, BracketSameLine, BracketSpacing, JsFormatOptions, JsdocOptions,
-    QuoteProperties, QuoteStyle, Semicolons, TrailingCommas,
+    QuoteProperties, QuoteStyle, Semicolons, TrailingCommas, WrapClassNamesOptions,
 };
 use oxc_formatter_core::{
     IndentStyle, IndentWidth, LineEnding, LineWidth,
@@ -110,6 +110,25 @@ impl FixtureFormatter for JsHarness {
                 }
                 "jsdoc" if value.is_object() => {
                     options.jsdoc = Some(JsdocOptions::default());
+                }
+                "wrapClassNames" => {
+                    let parse_list = |v: Option<&serde_json::Value>| {
+                        v.and_then(|v| v.as_array())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|s| s.as_str().map(ToString::to_string))
+                                    .collect()
+                            })
+                            .unwrap_or_default()
+                    };
+                    if value.as_bool() == Some(true) {
+                        options.wrap_class_names = Some(WrapClassNamesOptions::default());
+                    } else if let Some(obj) = value.as_object() {
+                        options.wrap_class_names = Some(WrapClassNamesOptions {
+                            attributes: parse_list(obj.get("attributes")),
+                            functions: parse_list(obj.get("functions")),
+                        });
+                    }
                 }
                 _ => {}
             }

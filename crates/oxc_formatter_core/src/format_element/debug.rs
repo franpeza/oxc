@@ -425,7 +425,7 @@ where
                         w!(f, [ContentArrayStart]);
                     }
                 }
-                FormatElement::TailwindClass(index) => {
+                FormatElement::TailwindClass { index, .. } => {
                     let class = f.context().get_tailwind_class(*index);
                     if let Some(class) = class {
                         w!(f, [text(f.allocator().alloc_str(class))]);

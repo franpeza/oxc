@@ -6,6 +6,8 @@ use oxc_span::GetSpan;
 use crate::{
     ast_nodes::AstNode,
     formatter::{prelude::*, trivia::FormatTrailingComments},
+    options::JsFormatOptions,
+    utils::tailwindcss::is_tailwind_jsx_attribute,
     write,
 };
 
@@ -49,7 +51,7 @@ impl<'a, 'b> FormatOpeningElement<'a, 'b> {
         } else if attributes.len() == 1
             && !name_has_comment
             && !last_attribute_has_comment
-            && is_single_line_string_literal_attribute(&attributes[0])
+            && is_single_line_string_literal_attribute(&attributes[0], f.options())
         {
             OpeningElementLayout::SingleStringAttribute
         } else {
@@ -59,11 +61,31 @@ impl<'a, 'b> FormatOpeningElement<'a, 'b> {
 }
 
 /// Returns `true` if this is an attribute with a [`StringLiteral`] initializer that contains at least one new line character.
-fn is_multiline_string_literal_attribute(attribute: &JSXAttributeItem<'_>) -> bool {
+///
+/// Wrap-target class attributes (`wrap_class_names`) are never multiline:
+/// their whitespace (including newlines from a previous wrap) is collapsed
+/// before printing, so treating them as multiline would flip the layout on
+/// re-format and break idempotency.
+fn is_multiline_string_literal_attribute(
+    attribute: &JSXAttributeItem<'_>,
+    options: &JsFormatOptions,
+) -> bool {
     let JSXAttributeItem::Attribute(attr) = attribute else {
         return false;
     };
-    attr.value.as_ref().is_some_and(|value| matches!(value, JSXAttributeValue::StringLiteral(string) if string.value.contains('\n')))
+    !is_wrap_target_attribute(attribute, options)
+        && attr.value.as_ref().is_some_and(|value| matches!(value, JSXAttributeValue::StringLiteral(string) if string.value.contains('\n')))
+}
+
+/// Returns `true` if `wrap_class_names` is enabled and targets this attribute.
+fn is_wrap_target_attribute(attribute: &JSXAttributeItem<'_>, options: &JsFormatOptions) -> bool {
+    let JSXAttributeItem::Attribute(attr) = attribute else {
+        return false;
+    };
+    options
+        .wrap_class_names
+        .as_ref()
+        .is_some_and(|opts| is_tailwind_jsx_attribute(&attr.name, &opts.attributes))
 }
 
 impl<'a> Format<'a, JsFormatContext<'a>> for FormatOpeningElement<'a, '_> {
@@ -119,7 +141,7 @@ impl<'a> Format<'a, JsFormatContext<'a>> for FormatOpeningElement<'a, '_> {
 
                 let has_multiline_string_attribute = attributes
                     .iter()
-                    .any(|attribute| is_multiline_string_literal_attribute(attribute));
+                    .any(|attribute| is_multiline_string_literal_attribute(attribute, f.options()));
                 write!(f, [group(&format_inner).should_expand(has_multiline_string_attribute)]);
             }
         }
@@ -157,8 +179,17 @@ pub enum OpeningElementLayout {
 }
 
 /// Returns `true` if this is an attribute with a string literal initializer that does not contain any new line characters.
-fn is_single_line_string_literal_attribute(attribute: &JSXAttributeItem) -> bool {
-    as_string_literal_attribute_value(attribute).is_some_and(|string| !string.value.contains('\n'))
+///
+/// Wrap-target class attributes (`wrap_class_names`) always count as
+/// single-line: their whitespace (including newlines from a previous wrap)
+/// is collapsed before printing.
+fn is_single_line_string_literal_attribute(
+    attribute: &JSXAttributeItem<'_>,
+    options: &JsFormatOptions,
+) -> bool {
+    as_string_literal_attribute_value(attribute).is_some_and(|string| {
+        !string.value.contains('\n') || is_wrap_target_attribute(attribute, options)
+    })
 }
 
 /// Returns `Some` if the initializer value of this attribute is a string literal.

@@ -23,7 +23,9 @@ use crate::{
         call_expression::is_test_each_pattern,
         expression::is_member_expression_without_chain_wrappers,
         format_node_without_trailing_comments::FormatNodeWithoutTrailingComments,
-        tailwindcss::{is_tailwind_function_call, write_tailwind_template_element},
+        tailwindcss::{
+            class_function_context, try_wrap_convert_template, write_tailwind_template_element,
+        },
     },
     write,
 };
@@ -46,6 +48,11 @@ impl<'a> FormatWrite<'a> for AstNode<'a, TemplateLiteral<'a>> {
         }
         // Language comment: /* HTML */ `...` or /* GraphQL */ `...`
         if embed::try_format_comment_embedded(self, f) {
+            return;
+        }
+        // Delimiter conversion in wrapping class contexts (`wrap_class_names`):
+        // an eligible template prints as a quoted string when it fits.
+        if try_wrap_convert_template(self, f) {
             return;
         }
         let template = TemplateLike::TemplateLiteral(self);
@@ -73,14 +80,10 @@ impl<'a> FormatWrite<'a> for AstNode<'a, TaggedTemplateExpression<'a>> {
 
         write!(f, [line_suffix_boundary()]);
 
-        // Check if this is a Tailwind function call (e.g., tw`flex p-4`)
+        // Check if this is a class-context tag (e.g., tw`flex p-4`) for
+        // Tailwind sorting and/or class wrapping.
         // Extract context entry before mutating f
-        let tailwind_ctx_to_push = f
-            .options()
-            .sort_tailwindcss
-            .as_ref()
-            .filter(|opts| is_tailwind_function_call(&self.tag, opts))
-            .map(|opts| TailwindContextEntry::new(opts.preserve_whitespace));
+        let tailwind_ctx_to_push = class_function_context(&self.tag, f.options());
 
         if let Some(ctx) = tailwind_ctx_to_push {
             f.context_mut().push_tailwind_context(ctx);

@@ -318,7 +318,7 @@ fn convert_elements(
                 current_children_mut(&mut stack)?.push(doc);
                 printer.last_was_hardline = false;
             }
-            FormatElement::TailwindClass(index) => {
+            FormatElement::TailwindClass { index, .. } => {
                 printer.flush_pending_space(&mut stack)?;
                 if let Some(class) = state.sorted_tailwind_classes.get(*index) {
                     concat_string(current_children_mut(&mut stack)?, class);

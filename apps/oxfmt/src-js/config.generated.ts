@@ -23,6 +23,7 @@ export type SortPackageJsonUserConfig = boolean | SortPackageJsonConfig;
 export type SortTailwindcssUserConfig = boolean | SortTailwindcssConfig;
 export type SvelteUserConfig = boolean | SvelteConfig;
 export type TrailingCommaConfig = "all" | "es5" | "none";
+export type WrapClassNamesUserConfig = boolean | WrapClassNamesConfig;
 
 /**
  * Configuration options for the Oxfmt.
@@ -265,6 +266,31 @@ export interface Oxfmtrc {
    * - Default: `false`
    */
   vueIndentScriptAndStyle?: boolean;
+  /**
+   * Wrap long class strings across multiple lines to fit the print width.
+   *
+   * Like [prettier-plugin-classnames](https://github.com/ony3000/prettier-plugin-classnames):
+   * when a class string (JSX `class`/`className` attribute, or a template literal
+   * in a configured function/tag context) exceeds the print width, its classes
+   * wrap onto continuation lines indented one level.
+   *
+   * Works independently of `sortTailwindcss`; when both are enabled,
+   * classes are sorted first and then wrapped.
+   *
+   * In expression positions the delimiter converts both ways, like the
+   * plugin: a plain string (e.g. `clsx("...")`) becomes a backtick
+   * template when — and only when — it has to wrap, and an expression-free
+   * template normalizes back to a quoted string when it fits on one line.
+   * JSX attribute values wrap in place (their strings may contain literal
+   * newlines) and tagged templates keep their backticks.
+   * Strings covered by `sortTailwindcss.preserveWhitespace` are not wrapped.
+   *
+   * Pass `true` or an object to enable with defaults, or omit/set `false` to disable.
+   *
+   * - Languages: JS, JSX, TS, TSX
+   * - Default: Disabled
+   */
+  wrapClassNames?: WrapClassNamesUserConfig;
   [k: string]: unknown;
 }
 export interface JsdocConfig {
@@ -578,6 +604,31 @@ export interface FormatConfig {
    * - Default: `false`
    */
   vueIndentScriptAndStyle?: boolean;
+  /**
+   * Wrap long class strings across multiple lines to fit the print width.
+   *
+   * Like [prettier-plugin-classnames](https://github.com/ony3000/prettier-plugin-classnames):
+   * when a class string (JSX `class`/`className` attribute, or a template literal
+   * in a configured function/tag context) exceeds the print width, its classes
+   * wrap onto continuation lines indented one level.
+   *
+   * Works independently of `sortTailwindcss`; when both are enabled,
+   * classes are sorted first and then wrapped.
+   *
+   * In expression positions the delimiter converts both ways, like the
+   * plugin: a plain string (e.g. `clsx("...")`) becomes a backtick
+   * template when — and only when — it has to wrap, and an expression-free
+   * template normalizes back to a quoted string when it fits on one line.
+   * JSX attribute values wrap in place (their strings may contain literal
+   * newlines) and tagged templates keep their backticks.
+   * Strings covered by `sortTailwindcss.preserveWhitespace` are not wrapped.
+   *
+   * Pass `true` or an object to enable with defaults, or omit/set `false` to disable.
+   *
+   * - Languages: JS, JSX, TS, TSX
+   * - Default: Disabled
+   */
+  wrapClassNames?: WrapClassNamesUserConfig;
   [k: string]: unknown;
 }
 export interface SortImportsConfig {
@@ -829,5 +880,26 @@ export interface SvelteConfig {
    * - Default: `"options-scripts-markup-styles"`
    */
   sortOrder?: string;
+  [k: string]: unknown;
+}
+export interface WrapClassNamesConfig {
+  /**
+   * List of additional attributes to wrap beyond `class` and `className` (exact match).
+   *
+   * NOTE: Regex patterns are not yet supported.
+   *
+   * - Default: `[]`
+   * - Example: `["myClassProp"]`
+   */
+  attributes?: string[];
+  /**
+   * List of function/tag names whose template literals contain class strings (exact match).
+   *
+   * NOTE: Regex patterns are not yet supported.
+   *
+   * - Default: `[]`
+   * - Example: `["clsx", "cn", "tw"]`
+   */
+  functions?: string[];
   [k: string]: unknown;
 }

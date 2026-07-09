@@ -195,6 +195,15 @@
       "description": "Whether or not to indent the code inside `<script>` and `<style>` tags in Vue files.\n\n- Languages: Vue\n- Default: `false`",
       "type": "boolean",
       "markdownDescription": "Whether or not to indent the code inside `<script>` and `<style>` tags in Vue files.\n\n- Languages: Vue\n- Default: `false`"
+    },
+    "wrapClassNames": {
+      "description": "Wrap long class strings across multiple lines to fit the print width.\n\nLike [prettier-plugin-classnames](https://github.com/ony3000/prettier-plugin-classnames):\nwhen a class string (JSX `class`/`className` attribute, or a template literal\nin a configured function/tag context) exceeds the print width, its classes\nwrap onto continuation lines indented one level.\n\nWorks independently of `sortTailwindcss`; when both are enabled,\nclasses are sorted first and then wrapped.\n\nIn expression positions the delimiter converts both ways, like the\nplugin: a plain string (e.g. `clsx(\"...\")`) becomes a backtick\ntemplate when — and only when — it has to wrap, and an expression-free\ntemplate normalizes back to a quoted string when it fits on one line.\nJSX attribute values wrap in place (their strings may contain literal\nnewlines) and tagged templates keep their backticks.\nStrings covered by `sortTailwindcss.preserveWhitespace` are not wrapped.\n\nPass `true` or an object to enable with defaults, or omit/set `false` to disable.\n\n- Languages: JS, JSX, TS, TSX\n- Default: Disabled",
+      "allOf": [
+        {
+          "$ref": "#/definitions/WrapClassNamesUserConfig"
+        }
+      ],
+      "markdownDescription": "Wrap long class strings across multiple lines to fit the print width.\n\nLike [prettier-plugin-classnames](https://github.com/ony3000/prettier-plugin-classnames):\nwhen a class string (JSX `class`/`className` attribute, or a template literal\nin a configured function/tag context) exceeds the print width, its classes\nwrap onto continuation lines indented one level.\n\nWorks independently of `sortTailwindcss`; when both are enabled,\nclasses are sorted first and then wrapped.\n\nIn expression positions the delimiter converts both ways, like the\nplugin: a plain string (e.g. `clsx(\"...\")`) becomes a backtick\ntemplate when — and only when — it has to wrap, and an expression-free\ntemplate normalizes back to a quoted string when it fits on one line.\nJSX attribute values wrap in place (their strings may contain literal\nnewlines) and tagged templates keep their backticks.\nStrings covered by `sortTailwindcss.preserveWhitespace` are not wrapped.\n\nPass `true` or an object to enable with defaults, or omit/set `false` to disable.\n\n- Languages: JS, JSX, TS, TSX\n- Default: Disabled"
     }
   },
   "allowComments": true,
@@ -433,6 +442,15 @@
           "description": "Whether or not to indent the code inside `<script>` and `<style>` tags in Vue files.\n\n- Languages: Vue\n- Default: `false`",
           "type": "boolean",
           "markdownDescription": "Whether or not to indent the code inside `<script>` and `<style>` tags in Vue files.\n\n- Languages: Vue\n- Default: `false`"
+        },
+        "wrapClassNames": {
+          "description": "Wrap long class strings across multiple lines to fit the print width.\n\nLike [prettier-plugin-classnames](https://github.com/ony3000/prettier-plugin-classnames):\nwhen a class string (JSX `class`/`className` attribute, or a template literal\nin a configured function/tag context) exceeds the print width, its classes\nwrap onto continuation lines indented one level.\n\nWorks independently of `sortTailwindcss`; when both are enabled,\nclasses are sorted first and then wrapped.\n\nIn expression positions the delimiter converts both ways, like the\nplugin: a plain string (e.g. `clsx(\"...\")`) becomes a backtick\ntemplate when — and only when — it has to wrap, and an expression-free\ntemplate normalizes back to a quoted string when it fits on one line.\nJSX attribute values wrap in place (their strings may contain literal\nnewlines) and tagged templates keep their backticks.\nStrings covered by `sortTailwindcss.preserveWhitespace` are not wrapped.\n\nPass `true` or an object to enable with defaults, or omit/set `false` to disable.\n\n- Languages: JS, JSX, TS, TSX\n- Default: Disabled",
+          "allOf": [
+            {
+              "$ref": "#/definitions/WrapClassNamesUserConfig"
+            }
+          ],
+          "markdownDescription": "Wrap long class strings across multiple lines to fit the print width.\n\nLike [prettier-plugin-classnames](https://github.com/ony3000/prettier-plugin-classnames):\nwhen a class string (JSX `class`/`className` attribute, or a template literal\nin a configured function/tag context) exceeds the print width, its classes\nwrap onto continuation lines indented one level.\n\nWorks independently of `sortTailwindcss`; when both are enabled,\nclasses are sorted first and then wrapped.\n\nIn expression positions the delimiter converts both ways, like the\nplugin: a plain string (e.g. `clsx(\"...\")`) becomes a backtick\ntemplate when — and only when — it has to wrap, and an expression-free\ntemplate normalizes back to a quoted string when it fits on one line.\nJSX attribute values wrap in place (their strings may contain literal\nnewlines) and tagged templates keep their backticks.\nStrings covered by `sortTailwindcss.preserveWhitespace` are not wrapped.\n\nPass `true` or an object to enable with defaults, or omit/set `false` to disable.\n\n- Languages: JS, JSX, TS, TSX\n- Default: Disabled"
         }
       }
     },
@@ -807,6 +825,37 @@
         "all",
         "es5",
         "none"
+      ]
+    },
+    "WrapClassNamesConfig": {
+      "type": "object",
+      "properties": {
+        "attributes": {
+          "description": "List of additional attributes to wrap beyond `class` and `className` (exact match).\n\nNOTE: Regex patterns are not yet supported.\n\n- Default: `[]`\n- Example: `[\"myClassProp\"]`",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "List of additional attributes to wrap beyond `class` and `className` (exact match).\n\nNOTE: Regex patterns are not yet supported.\n\n- Default: `[]`\n- Example: `[\"myClassProp\"]`"
+        },
+        "functions": {
+          "description": "List of function/tag names whose template literals contain class strings (exact match).\n\nNOTE: Regex patterns are not yet supported.\n\n- Default: `[]`\n- Example: `[\"clsx\", \"cn\", \"tw\"]`",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "List of function/tag names whose template literals contain class strings (exact match).\n\nNOTE: Regex patterns are not yet supported.\n\n- Default: `[]`\n- Example: `[\"clsx\", \"cn\", \"tw\"]`"
+        }
+      }
+    },
+    "WrapClassNamesUserConfig": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/WrapClassNamesConfig"
+        }
       ]
     }
   },

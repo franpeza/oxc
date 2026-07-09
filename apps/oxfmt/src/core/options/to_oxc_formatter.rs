@@ -4,7 +4,7 @@ use oxc_formatter::{
     ArrowParentheses, AttributePosition, BracketSameLine, BracketSpacing, CustomGroupDefinition,
     EmbeddedLanguageFormatting, Expand, GroupEntry, ImportModifier, ImportSelector,
     JsFormatOptions, QuoteProperties, QuoteStyle, Semicolons, SortImportsOptions, SortOrder,
-    SortTailwindcssOptions, TrailingCommas,
+    SortTailwindcssOptions, TrailingCommas, WrapClassNamesOptions,
 };
 
 use super::{
@@ -12,7 +12,7 @@ use super::{
         ArrowParensConfig, CustomGroupItemConfig, EmbeddedLanguageFormattingConfig, FormatConfig,
         HtmlWhitespaceSensitivityConfig, JsdocUserConfig, ObjectWrapConfig, QuotePropsConfig,
         SortGroupItemConfig, SortImportsUserConfig, SortOrderConfig, SortTailwindcssUserConfig,
-        TrailingCommaConfig,
+        TrailingCommaConfig, WrapClassNamesUserConfig,
     },
     to_core_options::to_core_options,
 };
@@ -135,6 +135,15 @@ pub fn to_oxc_formatter(config: &FormatConfig) -> Result<JsFormatOptions, String
             functions: tw_config.functions.unwrap_or_default(),
             attributes: tw_config.attributes.unwrap_or_default(),
             preserve_whitespace: tw_config.preserve_whitespace.unwrap_or(false),
+        });
+    }
+
+    if let Some(wrap_config) =
+        config.wrap_class_names.clone().and_then(WrapClassNamesUserConfig::into_config)
+    {
+        format_options.wrap_class_names = Some(WrapClassNamesOptions {
+            attributes: wrap_config.attributes.unwrap_or_default(),
+            functions: wrap_config.functions.unwrap_or_default(),
         });
     }
 

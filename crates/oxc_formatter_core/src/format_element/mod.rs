@@ -1,6 +1,7 @@
 pub mod debug;
 pub mod document;
 pub mod tag;
+pub mod wrap_expand;
 
 // #[cfg(target_pointer_width = "64")]
 // use biome_rowan::static_assert;
@@ -89,9 +90,12 @@ pub enum FormatElement<'a> {
     Tag(Tag),
 
     /// A Tailwind CSS class sorting marker.
-    /// The usize is an index into the collected tailwind classes array.
+    /// `index` points into the collected tailwind classes array.
     /// During printing, this will be replaced with the sorted class name.
-    TailwindClass(usize),
+    /// A `wrap: true` marker must be expanded into a `fill` by the consumer's
+    /// post-sort IR transform before printing (the class list wraps to the
+    /// print width); the printer itself only prints the single-text form.
+    TailwindClass { index: usize, wrap: bool },
 
     /// An embedded-language interpolation placeholder.
     /// The `u32` is the host's expression index (0-based, e.g. the Nth `${expr}` of a css-in-js template).
@@ -114,8 +118,8 @@ impl std::fmt::Debug for FormatElement<'_> {
             }
             FormatElement::Interned(interned) => fmt.debug_list().entries(&**interned).finish(),
             FormatElement::Tag(tag) => fmt.debug_tuple("Tag").field(tag).finish(),
-            FormatElement::TailwindClass(index) => {
-                fmt.debug_tuple("TailwindClass").field(index).finish()
+            FormatElement::TailwindClass { index, wrap } => {
+                fmt.debug_struct("TailwindClass").field("index", index).field("wrap", wrap).finish()
             }
             FormatElement::EmbedPlaceholder(index) => {
                 fmt.debug_tuple("EmbedPlaceholder").field(index).finish()
@@ -172,6 +176,14 @@ pub struct Interned<'a>(&'a [FormatElement<'a>]);
 impl<'a> Interned<'a> {
     pub(crate) fn new(content: ArenaVec<'a, FormatElement<'a>>) -> Self {
         Self(content.into_arena_slice())
+    }
+
+    pub(crate) fn from_slice(content: &'a [FormatElement<'a>]) -> Self {
+        Self(content)
+    }
+
+    pub(crate) fn as_slice(&self) -> &'a [FormatElement<'a>] {
+        self.0
     }
 }
 
@@ -288,7 +300,7 @@ impl FormatElements for FormatElement<'_> {
             | FormatElement::LineSuffixBoundary
             | FormatElement::Space
             | FormatElement::Tag(_)
-            | FormatElement::TailwindClass(_)
+            | FormatElement::TailwindClass { .. }
             | FormatElement::EmbedPlaceholder(_) => false,
         }
     }

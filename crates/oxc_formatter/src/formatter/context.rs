@@ -35,6 +35,14 @@ pub struct TailwindContextEntry {
     /// For example, in `classNames("a", x.includes("\n") ? "b" : "c")`, the `"\n"`
     /// inside `includes()` should NOT be sorted as a Tailwind class.
     pub disabled: bool,
+    /// Whether class strings in this context should wrap to the print width
+    /// (`wrap_class_names` option). Emitted markers carry this flag so the
+    /// post-sort IR transform can expand them into a `fill`.
+    pub wrap: bool,
+    /// Whether Tailwind sorting targets this context (`sort_tailwindcss`).
+    /// Sorting trims boundary whitespace in expression contexts; a wrap-only
+    /// context preserves it (matching prettier-plugin-classnames).
+    pub sort: bool,
 }
 
 impl TailwindContextEntry {
@@ -48,7 +56,23 @@ impl TailwindContextEntry {
             is_first_quasi: true,
             is_last_quasi: true,
             disabled: false,
+            wrap: false,
+            sort: true,
         }
+    }
+
+    /// Enable class-string wrapping for this context (`wrap_class_names`).
+    #[must_use]
+    pub fn with_wrap(mut self, wrap: bool) -> Self {
+        self.wrap = wrap;
+        self
+    }
+
+    /// Set whether Tailwind sorting targets this context.
+    #[must_use]
+    pub fn with_sort(mut self, sort: bool) -> Self {
+        self.sort = sort;
+        self
     }
 
     /// Create a new context entry for template literal expressions.
@@ -66,6 +90,8 @@ impl TailwindContextEntry {
             is_first_quasi: true,
             is_last_quasi: true,
             disabled: false,
+            wrap: parent.wrap,
+            sort: parent.sort,
         }
     }
 
@@ -105,6 +131,10 @@ pub struct JsFormatContext<'ast> {
     /// Stack tracking whether we're inside a Tailwind class context.
     /// When non-empty, StringLiterals should be sorted as Tailwind classes.
     tailwind_context_stack: Vec<TailwindContextEntry>,
+
+    /// Whether at least one `TailwindClass { wrap: true }` marker was emitted,
+    /// so `format()` can skip the wrap-expansion IR transform when unused.
+    wrap_markers_emitted: bool,
 
     external_callbacks: ExternalCallbacks,
 }
@@ -165,6 +195,7 @@ impl<'ast> JsFormatContext<'ast> {
             quote_needed_stack: Vec::new(),
             tailwind_classes: Vec::new(),
             tailwind_context_stack: Vec::new(),
+            wrap_markers_emitted: false,
             external_callbacks: external_callbacks.unwrap_or_default(),
         }
     }
@@ -260,6 +291,16 @@ impl<'ast> JsFormatContext<'ast> {
     /// Get a mutable reference to the current Tailwind context, if any.
     pub fn tailwind_context_mut(&mut self) -> Option<&mut TailwindContextEntry> {
         self.tailwind_context_stack.last_mut()
+    }
+
+    /// Record that a `TailwindClass { wrap: true }` marker was emitted.
+    pub fn set_wrap_markers_emitted(&mut self) {
+        self.wrap_markers_emitted = true;
+    }
+
+    /// Whether any `TailwindClass { wrap: true }` marker was emitted.
+    pub fn wrap_markers_emitted(&self) -> bool {
+        self.wrap_markers_emitted
     }
 
     /// Get the external callbacks if set

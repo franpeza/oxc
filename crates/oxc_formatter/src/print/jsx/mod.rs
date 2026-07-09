@@ -15,13 +15,12 @@ use crate::{
     ast_nodes::{AstNode, AstNodes},
     format_args,
     formatter::{
-        TailwindContextEntry,
         prelude::*,
         trivia::{DanglingIndentMode, FormatDanglingComments, FormatTrailingComments},
     },
     utils::{
         expression::as_call_expression_without_chain_wrappers,
-        tailwindcss::is_tailwind_jsx_attribute,
+        tailwindcss::{class_attribute_context, is_wrap_convertible_string_container},
     },
     write,
 };
@@ -224,7 +223,11 @@ impl<'a> FormatWrite<'a> for AstNode<'a, JSXExpressionContainer<'a>> {
             }
         } else {
             // JSXAttributeValue
-            let should_inline = !has_comment(f) && should_inline_jsx_expression(self);
+            let should_inline = !has_comment(f)
+                && (should_inline_jsx_expression(self)
+                    // A wrap-convertible class string prints as a template
+                    // when it wraps, so it hugs the braces like one.
+                    || is_wrap_convertible_string_container(self, f));
 
             if should_inline {
                 write!(f, ["{", self.expression(), line_suffix_boundary(), "}"]);
@@ -328,14 +331,9 @@ impl<'a> FormatWrite<'a> for AstNode<'a, JSXAttribute<'a>> {
         write!(f, self.name());
 
         if let Some(value) = &self.value() {
-            // Check if this is a Tailwind attribute and push context
-            // Extract context entry before mutating f
-            let tailwind_ctx_to_push = f
-                .options()
-                .sort_tailwindcss
-                .as_ref()
-                .filter(|opts| is_tailwind_jsx_attribute(&self.name, opts))
-                .map(|opts| TailwindContextEntry::new(opts.preserve_whitespace));
+            // Check if this is a class attribute (Tailwind sort and/or wrap)
+            // and push context. Extract context entry before mutating f
+            let tailwind_ctx_to_push = class_attribute_context(&self.name, f.options());
 
             if let Some(ctx) = tailwind_ctx_to_push {
                 f.context_mut().push_tailwind_context(ctx);

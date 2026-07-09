@@ -106,7 +106,7 @@ impl DispatchResult<'_> {
         }
         for doc in &mut self.docs {
             for element in doc.iter_mut() {
-                if let FormatElement::TailwindClass(index) = element {
+                if let FormatElement::TailwindClass { index, .. } = element {
                     *index += base;
                 }
             }

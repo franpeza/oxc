@@ -57,7 +57,7 @@ pub use self::{
     context::{JsFormatContext, TailwindContextEntry},
     formatter_js::{JsFormatter, JsFormatterExt},
 };
-use oxc_formatter_core::Document;
+use oxc_formatter_core::{Document, FormatContext as _};
 
 /// The `format` function takes an [`Arguments`] struct and returns the resulting formatting IR.
 ///
@@ -84,6 +84,20 @@ pub fn format<'ast>(
     let tailwind_classes = context.take_tailwind_classes();
     let sorted_tailwind_classes =
         context.external_callbacks().sort_tailwind_classes(tailwind_classes);
+
+    // Expand `TailwindClass { wrap: true }` markers into fills now that the
+    // sorted content is known. Must run before `propagate_expand` so only
+    // single-line texts and soft lines take part in expand propagation.
+    let elements = if context.wrap_markers_emitted() {
+        oxc_formatter_core::expand_wrap_markers(
+            elements,
+            &sorted_tailwind_classes,
+            context.options().indent_width,
+            allocator,
+        )
+    } else {
+        elements
+    };
 
     let document = Document::new(elements, sorted_tailwind_classes);
 

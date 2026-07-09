@@ -392,6 +392,7 @@ mod tests_to_prettier {
                 "sortImports": true,
                 "sortPackageJson": true,
                 "sortTailwindcss": true,
+                "wrapClassNames": true,
                 "jsdoc": true
             }"#,
         );
@@ -406,6 +407,7 @@ mod tests_to_prettier {
             "experimentalSortPackageJson",
             "sortTailwindcss",
             "experimentalTailwindcss",
+            "wrapClassNames",
             "jsdoc",
             "overrides",
             "ignorePatterns",
