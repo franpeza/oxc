@@ -19,5 +19,6 @@
   { "cwd": "package_json_shared", "args": ["--migrate", "prettier"] },
   { "cwd": "yaml_prettierrc", "args": ["--migrate", "prettier"] },
   { "cwd": "parent_config/sub", "args": ["--migrate", "prettier"] },
-  { "cwd": "already_exists_ts", "args": ["--migrate", "prettier"] }
+  { "cwd": "already_exists_ts", "args": ["--migrate", "prettier"] },
+  { "cwd": "classnames_plugin", "args": ["--migrate", "prettier"] }
 ]

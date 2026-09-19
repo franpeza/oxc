@@ -137,6 +137,9 @@ Tailwind class sorting (`sortTailwindcss`) splits responsibilities:
 
 Embedded children add classes into the `FormatSession`'s class scope, shared with the parent, so the root document sorts them in the same batch.
 
+Class-string wrapping (`wrapClassNames`) reuses the JS/TS half of that collection but sorts nothing,
+so it needs no `SessionServices` and is the one class feature that also works in the pure Rust build.
+
 The four data paths (JS/TS top-level / standalone CSS / embedded CSS / JSDoc fenced CSS) are documented at `embed::services::for_root` (napi definition).
 No CSS goes to Prettier for this; the pure Rust build never collects at all (both mappers gate collection behind napi, since no sorter exists there).
 

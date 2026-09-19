@@ -46,6 +46,9 @@ export async function runMigratePrettier() {
   for (const plugin of Array.isArray(plugins) ? plugins : []) {
     if (KNOWN_PLUGINS.has(plugin)) {
       enabledPlugins.add(plugin);
+    } else if (plugin === "prettier-plugin-merge") {
+      // Only glue for running several plugins; Oxfmt needs no equivalent.
+      warnings.push(`plugins: "${plugin}" is not needed, skipping...`);
     } else if (typeof plugin === "string") {
       warnings.push(`plugins: "${plugin}" is not supported, skipping...`);
     } else {
@@ -326,7 +329,7 @@ const PARSER_TO_LANGUAGE = new Map<unknown, Language>([
 ]);
 
 // Plugin options: only enable when the corresponding Prettier plugin is used.
-// Empty object means "enabled with defaults"; Tailwind, Svelte and Astro are disabled by default.
+// Empty object means "enabled with defaults"; Tailwind, Svelte, Astro and class wrapping are disabled by default.
 // In overrides, namespaces are deep-merged with top-level, so only set ones are needed.
 function migratePluginOptions(
   options: Record<string, unknown>,
@@ -340,6 +343,13 @@ function migratePluginOptions(
     if (!isTopLevel && Object.keys(migrated).length === 0) continue;
     result[oxfmtKey] = migrated;
     if (isTopLevel) console.log(`  - Migrated "${plugin}" options to "${oxfmtKey}"`);
+  }
+
+  // `prettier-plugin-classnames` always supports `classNames`, Oxfmt only what is listed.
+  const wrapClassNames = result.wrapClassNames as Record<string, unknown> | undefined;
+  if (wrapClassNames && (isTopLevel || Array.isArray(wrapClassNames.functions))) {
+    const functions = Array.isArray(wrapClassNames.functions) ? wrapClassNames.functions : [];
+    wrapClassNames.functions = [...new Set([...functions, "classNames"])];
   }
 
   return result;
@@ -371,10 +381,17 @@ const ASTRO_OPTION_MAPPING: Record<string, string> = {
   compressHTML: "astroCompressHTML",
 };
 
+const CLASSNAMES_OPTION_MAPPING: Record<string, string> = {
+  attributes: "customAttributes",
+  functions: "customFunctions",
+  syntaxTransformation: "syntaxTransformation",
+};
+
 const NAMESPACED_PLUGINS = [
   ["prettier-plugin-tailwindcss", "sortTailwindcss", TAILWIND_OPTION_MAPPING, filterTailwindRegex],
   ["prettier-plugin-svelte", "svelte", SVELTE_OPTION_MAPPING, undefined],
   ["prettier-plugin-astro", "astro", ASTRO_OPTION_MAPPING, normalizeAstroCompressHTML],
+  ["prettier-plugin-classnames", "wrapClassNames", CLASSNAMES_OPTION_MAPPING, undefined],
 ] as const;
 
 const KNOWN_PLUGINS = new Set<unknown>([

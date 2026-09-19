@@ -1,0 +1,28 @@
+// Not class lists: comparisons, `in`, computed keys and `new` arguments are never wrapped
+const a = clsx(variant === "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors" && "p-2");
+const b = clsx(("inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors" in obj) && "p-2");
+const c = <div className={styles["inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors"]} />;
+const d = clsx(styles["inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors"]);
+const e = clsx(new Foo("inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors"));
+const f = <div className={cond === "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors" ? "p-2" : "p-4"} />;
+// Unlike prettier-plugin-classnames, which wraps it and so changes the compared value
+const g = clsx(x === `inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors`);
+
+// Class positions: branches, operands, array elements, object values and concatenation wrap
+const h = clsx(cond ? "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors" : "p-2");
+const i = clsx(cond && "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors");
+const j = clsx(["inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors"]);
+const k = clsx({ root: "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors" });
+const l = clsx("p-2 " + "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors");
+// Not wrapped inside `${}` yet (prettier-plugin-classnames wraps it)
+const m = <div className={`p-2 ${cond ? "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors" : ""}`} />;
+
+// A non-class attribute or tag nested in a class call is not a class list
+const n = clsx(<div id="aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll mmmm nnnn" />);
+const o = clsx(<div className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background" />);
+const p = clsx(sql`select aaaa, bbbb, cccc, dddd, eeee, ffff, gggg, hhhh, iiii, jjjj from t`);
+
+// Arguments of a nested non-class call are not class lists, templates included
+const q = clsx(lookup(`c00 c01 c02 c03 c04 c05 c06 c07 c08 c09 c10 c11 c12 c13 c14 c15 c16 c17 c18 c19 c20 c21`));
+const r = clsx(lookup(`x ${"c00 c01 c02 c03 c04 c05 c06 c07 c08 c09 c10 c11 c12 c13 c14 c15 c16 c17 c18 c19 c20 c21"} y`));
+const s = clsx(<div id={"c00 c01 c02 c03 c04 c05 c06 c07 c08 c09 c10 c11 c12 c13 c14 c15 c16 c17 c18 c19 c20 c21"} />);

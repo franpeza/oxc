@@ -94,10 +94,20 @@ pub struct FormatSession<'a> {
     /// leaves its classes as unreferenced entries, which are inert:
     /// the sorter reorders classes WITHIN each string, never the vector,
     /// so indices stay stable and unprinted entries never reach the output.
-    tailwind_classes: Rc<RefCell<Vec<String>>>,
+    ///
+    /// The scope also records which of its classes stay out of the sort ([`Self::add_unsorted_class`]).
+    tailwind_scope: Rc<RefCell<TailwindScope>>,
     services: SessionServices,
     input_kind: InputKind,
     dispatch_depth: u8,
+}
+
+/// The classes of one root `Document`, see [`FormatSession`]'s `tailwind_scope`.
+#[derive(Default)]
+struct TailwindScope {
+    classes: Vec<String>,
+    /// Indices into `classes` that are never sent to the sorter, in ascending order.
+    unsorted_indices: Vec<usize>,
 }
 
 impl<'a> FormatSession<'a> {
@@ -119,7 +129,7 @@ impl<'a> FormatSession<'a> {
         Self {
             allocator,
             group_id_builder: Arc::new(UniqueGroupIdBuilder::default()),
-            tailwind_classes: Rc::default(),
+            tailwind_scope: Rc::default(),
             services,
             input_kind,
             dispatch_depth: 0,
@@ -135,7 +145,7 @@ impl<'a> FormatSession<'a> {
         Self {
             allocator: self.allocator,
             group_id_builder: Arc::clone(&self.group_id_builder),
-            tailwind_classes: Rc::clone(&self.tailwind_classes),
+            tailwind_scope: Rc::clone(&self.tailwind_scope),
             services: self.services.clone(),
             input_kind,
             dispatch_depth: self.dispatch_depth + 1,
@@ -238,38 +248,79 @@ impl<'a> FormatSession<'a> {
     /// Children dispatched from the returned session share the new scope.
     #[must_use]
     pub fn with_new_tailwind_scope(&self) -> Self {
-        Self { tailwind_classes: Rc::default(), ..self.clone() }
+        Self { tailwind_scope: Rc::default(), ..self.clone() }
     }
 
     /// Registers a pre-sort class string in the current scope,
     /// returning its index for `FormatElement::TailwindClass`.
     pub fn add_tailwind_class(&self, class: String) -> usize {
-        let mut classes = self.tailwind_classes.borrow_mut();
-        classes.push(class);
-        classes.len() - 1
+        let mut scope = self.tailwind_scope.borrow_mut();
+        scope.classes.push(class);
+        scope.classes.len() - 1
+    }
+
+    /// Registers a class string in the current scope that is never sent to the sorter,
+    /// returning its index for `FormatElement::TailwindClass`.
+    /// For a string a formatter only needs to print (or rewrite) by index, not to sort.
+    pub fn add_unsorted_class(&self, class: String) -> usize {
+        let mut scope = self.tailwind_scope.borrow_mut();
+        scope.classes.push(class);
+        let index = scope.classes.len() - 1;
+        scope.unsorted_indices.push(index);
+        index
     }
 
     /// A copy of the current scope's classes, unsorted,
     /// for printing a sub-document before the root finalizes (the scope stays intact).
     pub fn unsorted_tailwind_classes(&self) -> Vec<String> {
-        self.tailwind_classes.borrow().clone()
+        self.tailwind_scope.borrow().classes.clone()
     }
 
     /// Takes the current scope's classes, sorted through the print-time service ([`TailwindSorter`])
     /// or unsorted when this run installs no sorter.
+    /// Classes added with [`Self::add_unsorted_class`] keep their content and never reach the sorter.
     /// Called once by a root formatter when it finalizes its `Document`.
     pub fn take_sorted_tailwind_classes(&self) -> Vec<String> {
-        let classes = self.tailwind_classes.take();
-        match &self.services.tailwind_sorter {
-            Some(sort) if !classes.is_empty() => {
-                let len = classes.len();
-                let sorted = sort(classes);
-                // `TailwindClass(index)` stays valid only if the sorter keeps one entry per class, in order
-                debug_assert_eq!(sorted.len(), len, "TailwindSorter must keep one entry per class");
-                sorted
+        let TailwindScope { mut classes, unsorted_indices } = self.tailwind_scope.take();
+        let Some(sort) = &self.services.tailwind_sorter else {
+            return classes;
+        };
+        if unsorted_indices.is_empty() {
+            if classes.is_empty() {
+                return classes;
             }
-            _ => classes,
+            let len = classes.len();
+            let sorted = sort(classes);
+            // `TailwindClass(index)` stays valid only if the sorter keeps one entry per class, in order
+            debug_assert_eq!(sorted.len(), len, "TailwindSorter must keep one entry per class");
+            return sorted;
         }
+
+        let mut is_unsorted = vec![false; classes.len()];
+        for index in unsorted_indices {
+            is_unsorted[index] = true;
+        }
+        let sortable: Vec<String> = classes
+            .iter()
+            .zip(&is_unsorted)
+            .filter(|(_, unsorted)| !**unsorted)
+            .map(|(class, _)| class.clone())
+            .collect();
+        if sortable.is_empty() {
+            return classes;
+        }
+        let len = sortable.len();
+        let sorted = sort(sortable);
+        debug_assert_eq!(sorted.len(), len, "TailwindSorter must keep one entry per class");
+        // The sorted strings go back into the slots they were taken from;
+        // a sorter returning fewer leaves the remaining slots with their collected content.
+        let mut sorted = sorted.into_iter();
+        for (class, unsorted) in classes.iter_mut().zip(&is_unsorted) {
+            if !unsorted && let Some(sorted_class) = sorted.next() {
+                *class = sorted_class;
+            }
+        }
+        classes
     }
 }
 
@@ -444,6 +495,24 @@ mod tests {
         nested.add_tailwind_class("nested".to_string());
         assert_eq!(nested.take_sorted_tailwind_classes(), ["nested"]);
         assert_eq!(host.take_sorted_tailwind_classes(), ["host"]);
+    }
+
+    #[test]
+    fn unsorted_classes_skip_the_sorter_and_keep_their_slots() {
+        let allocator = Allocator::default();
+        let session = FormatSession::with_services(
+            &allocator,
+            InputKind::PhysicalFile,
+            SessionServices {
+                tailwind_sorter: Some(reversing_sorter()),
+                ..SessionServices::default()
+            },
+        );
+
+        assert_eq!(session.add_tailwind_class("a b".to_string()), 0);
+        assert_eq!(session.add_unsorted_class("c d".to_string()), 1);
+        assert_eq!(session.add_tailwind_class("e f".to_string()), 2);
+        assert_eq!(session.take_sorted_tailwind_classes(), ["b a", "c d", "f e"]);
     }
 
     #[test]

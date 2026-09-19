@@ -5,7 +5,10 @@ use oxc_span::GetSpan;
 
 use crate::{
     ast_nodes::AstNode,
+    best_fitting, format_args,
     formatter::{prelude::*, trivia::FormatTrailingComments},
+    options::JsFormatOptions,
+    utils::tailwindcss::class_attribute_context,
     write,
 };
 
@@ -46,12 +49,19 @@ impl<'a, 'b> FormatOpeningElement<'a, 'b> {
 
         if self.is_self_closing && attributes.is_empty() && !name_has_comment {
             OpeningElementLayout::Inline
-        } else if attributes.len() == 1
-            && !name_has_comment
-            && !last_attribute_has_comment
-            && is_single_line_string_literal_attribute(&attributes[0])
-        {
-            OpeningElementLayout::SingleStringAttribute
+        } else if attributes.len() == 1 && !name_has_comment && !last_attribute_has_comment {
+            if is_single_line_string_literal_attribute(&attributes[0], f.options()) {
+                OpeningElementLayout::SingleStringAttribute
+            } else if is_wrapped_class_attribute(&attributes[0], f.options())
+                && as_string_literal_attribute_value(&attributes[0]).is_some()
+            {
+                OpeningElementLayout::SingleWrappedClassAttribute
+            } else {
+                OpeningElementLayout::IndentAttributes {
+                    name_has_comment,
+                    last_attribute_has_comment,
+                }
+            }
         } else {
             OpeningElementLayout::IndentAttributes { name_has_comment, last_attribute_has_comment }
         }
@@ -59,11 +69,29 @@ impl<'a, 'b> FormatOpeningElement<'a, 'b> {
 }
 
 /// Returns `true` if this is an attribute with a [`StringLiteral`] initializer that contains at least one new line character.
-fn is_multiline_string_literal_attribute(attribute: &JSXAttributeItem<'_>) -> bool {
+///
+/// A wrapped class attribute (`wrap_class_names`) is never multiline: its
+/// whitespace, including newlines from a previous wrap, is collapsed before
+/// printing, so the source newlines must not decide the layout.
+fn is_multiline_string_literal_attribute(
+    attribute: &JSXAttributeItem<'_>,
+    options: &JsFormatOptions,
+) -> bool {
     let JSXAttributeItem::Attribute(attr) = attribute else {
         return false;
     };
-    attr.value.as_ref().is_some_and(|value| matches!(value, JSXAttributeValue::StringLiteral(string) if string.value.contains('\n')))
+    !is_wrapped_class_attribute(attribute, options)
+        && attr.value.as_ref().is_some_and(|value| matches!(value, JSXAttributeValue::StringLiteral(string) if string.value.contains('\n')))
+}
+
+/// Returns `true` if `wrap_class_names` wraps this attribute's value
+/// (strings kept verbatim by `sortTailwindcss.preserveWhitespace` are not wrapped).
+fn is_wrapped_class_attribute(attribute: &JSXAttributeItem<'_>, options: &JsFormatOptions) -> bool {
+    let JSXAttributeItem::Attribute(attr) = attribute else {
+        return false;
+    };
+    class_attribute_context(&attr.name, options)
+        .is_some_and(|ctx| ctx.wrap && !ctx.preserve_whitespace)
 }
 
 impl<'a> Format<'a, JsFormatContext<'a>> for FormatOpeningElement<'a, '_> {
@@ -85,6 +113,28 @@ impl<'a> Format<'a, JsFormatContext<'a>> for FormatOpeningElement<'a, '_> {
                     f,
                     [format_open, space(), self.attributes(), attribute_spacing, format_close]
                 );
+            }
+            OpeningElementLayout::SingleWrappedClassAttribute => {
+                // Like Prettier with prettier-plugin-classnames: the attribute
+                // stays on the tag line when the class string itself fits there,
+                // even if the closing `>` or `/>` then overflows.
+                let hugged = format_with(|f| {
+                    write!(f, [format_open, space(), self.attributes()]);
+                    if self.is_self_closing {
+                        write!(f, [space()]);
+                    }
+                    f.write_element(FormatElement::MeasureAlone);
+                });
+                let broken = format_with(|f| {
+                    write!(
+                        f,
+                        [format_open, indent(&format_args!(hard_line_break(), self.attributes()))]
+                    );
+                    if self.is_self_closing || !f.options().bracket_same_line.value() {
+                        write!(f, [hard_line_break()]);
+                    }
+                });
+                write!(f, [best_fitting!(hugged, broken), format_close]);
             }
             OpeningElementLayout::IndentAttributes {
                 name_has_comment,
@@ -119,7 +169,7 @@ impl<'a> Format<'a, JsFormatContext<'a>> for FormatOpeningElement<'a, '_> {
 
                 let has_multiline_string_attribute = attributes
                     .iter()
-                    .any(|attribute| is_multiline_string_literal_attribute(attribute));
+                    .any(|attribute| is_multiline_string_literal_attribute(attribute, f.options()));
                 write!(f, [group(&format_inner).should_expand(has_multiline_string_attribute)]);
             }
         }
@@ -144,6 +194,12 @@ pub enum OpeningElementLayout {
     /// ```
     SingleStringAttribute,
 
+    /// Opening element with a single class attribute that `wrap_class_names` wraps.
+    ///
+    /// The attribute stays on the tag line while its class string fits there;
+    /// otherwise it moves onto its own line, where the classes wrap.
+    SingleWrappedClassAttribute,
+
     /// Default layout that indents the attributes and formats each attribute on its own line.
     ///
     /// ```javascript
@@ -157,8 +213,21 @@ pub enum OpeningElementLayout {
 }
 
 /// Returns `true` if this is an attribute with a string literal initializer that does not contain any new line characters.
-fn is_single_line_string_literal_attribute(attribute: &JSXAttributeItem) -> bool {
-    as_string_literal_attribute_value(attribute).is_some_and(|string| !string.value.contains('\n'))
+///
+/// A wrapped class attribute with several classes is excluded: it takes
+/// [`OpeningElementLayout::SingleWrappedClassAttribute`], which can move it
+/// onto its own line.
+fn is_single_line_string_literal_attribute(
+    attribute: &JSXAttributeItem<'_>,
+    options: &JsFormatOptions,
+) -> bool {
+    as_string_literal_attribute_value(attribute).is_some_and(|string| {
+        if is_wrapped_class_attribute(attribute, options) {
+            string.value.split_ascii_whitespace().nth(1).is_none()
+        } else {
+            !string.value.contains('\n')
+        }
+    })
 }
 
 /// Returns `Some` if the initializer value of this attribute is a string literal.

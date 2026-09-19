@@ -30,13 +30,13 @@ pub mod trivia;
 pub use self::builders::JoinBuilderJsExt;
 pub use self::comments::Comments;
 pub use self::{
-    context::{JsFormatContext, TailwindContextEntry},
+    context::{ClassContext, JsFormatContext},
     formatter_js::{JsFormatter, JsFormatterExt},
 };
 use oxc_allocator::ArenaVec;
 use oxc_formatter_core::{
-    Arguments, Buffer as _, Document, FormatElement, FormatSession, FormatState, Formatted,
-    VecBuffer,
+    Arguments, Buffer as _, Document, FormatContext as _, FormatElement, FormatSession,
+    FormatState, Formatted, VecBuffer,
 };
 
 /// The `format` function takes an [`Arguments`] struct and returns the resulting formatting IR.
@@ -50,9 +50,33 @@ pub fn format<'ast>(
     // A root `Document` owns a fresh class scope;
     // a root nested on the same session (a JSDoc snippet) must not take its host's classes.
     let session = session.with_new_tailwind_scope();
-    let (elements, context) = build_ir(context, &session, arguments);
+    let (elements, mut context) = build_ir(context, &session, arguments);
 
-    let ir = Document::new(elements, session.take_sorted_tailwind_classes());
+    let sorted_tailwind_classes = session.take_sorted_tailwind_classes();
+
+    // Expand the wrapping class markers into fills now that the sorted content is known.
+    let wrapped_indices = context.take_wrapped_class_indices();
+    let elements = if wrapped_indices.is_empty() {
+        elements
+    } else {
+        let mut wraps = vec![false; sorted_tailwind_classes.len()];
+        for index in wrapped_indices {
+            // A host sorter that returned fewer classes than it was given leaves
+            // the tail out of range; the printer reports that on its own.
+            if let Some(wrap) = wraps.get_mut(index) {
+                *wrap = true;
+            }
+        }
+        crate::ir_transform::expand_wrap_markers(
+            elements,
+            &sorted_tailwind_classes,
+            &wraps,
+            context.options(),
+            session.allocator(),
+        )
+    };
+
+    let ir = Document::new(elements, sorted_tailwind_classes);
 
     Formatted::new(ir, context)
 }

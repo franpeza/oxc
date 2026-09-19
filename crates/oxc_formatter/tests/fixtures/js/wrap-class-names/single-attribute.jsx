@@ -1,0 +1,9 @@
+// A single class attribute stays on the tag line while the string itself
+// fits there, even when the closing `>` or `/>` then overflows.
+const a = <div className="flex items-center justify-between rounded-md border p-111111" />;
+const b = <div className="flex items-center justify-between rounded-md border px-4 py-2">x</div>;
+
+// Past the print width, the attribute moves onto its own line and wraps only
+// if it still does not fit there.
+const c = <div className="flex items-center justify-between rounded-md border px-4 py-2 text-sm" />;
+const d = <div className="flex items-center justify-between rounded-md border bg-white px-4 py-2 text-sm shadow-sm hover:bg-gray-50">x</div>;

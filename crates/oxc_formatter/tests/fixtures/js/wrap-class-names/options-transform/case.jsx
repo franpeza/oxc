@@ -1,0 +1,8 @@
+function F() {
+  return (
+    <section>
+      <div className="bg-gray-100/50 dark:bg-neutral-900/50 border border-zinc-400/30 dark:border-neutral-500/30 rounded-xl px-4 py-4">x</div>
+    </section>
+  );
+}
+const a = clsx("bg-gray-100/50 dark:bg-neutral-900/50 border border-zinc-400/30 dark:border-neutral-500/30 rounded-xl px-4 py-4");

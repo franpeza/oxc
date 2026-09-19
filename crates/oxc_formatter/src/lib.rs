@@ -125,9 +125,13 @@ pub fn format_to_ir<'a>(
     session: &FormatSession<'a>,
     source_text: &str,
     source_type: SourceType,
-    options: JsFormatOptions,
+    mut options: JsFormatOptions,
     embedded_in: Option<JsEmbeddedIn>,
 ) -> Result<EmbeddedIr<'a>, OxcDiagnostic> {
+    // A wrapping class string is expanded once its sorted content is known, when a JS root
+    // finalizes its `Document` (`formatter::format`); an embedded program has no such step.
+    options.wrap_class_names = None;
+
     let allocator = session.allocator();
     let program = parse(allocator, allocator.alloc_str(source_text), source_type)?;
     let node = AstNode::new(program, AstNodes::Dummy(), allocator);

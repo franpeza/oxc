@@ -8,6 +8,7 @@ use std::str::FromStr;
 use oxc_formatter::{
     ArrowParentheses, AttributePosition, BracketSameLine, BracketSpacing, Expand, JsFormatOptions,
     JsdocOptions, OperatorPosition, QuoteProperties, QuoteStyle, Semicolons, TrailingCommas,
+    WrapClassNamesOptions,
 };
 use oxc_formatter_tests::{OptionSet, apply_core_options};
 
@@ -102,6 +103,27 @@ pub fn apply_js_options(options: &mut JsFormatOptions, json: &OptionSet) {
             // Deliberately a bool, an object form not yet supported.
             "jsdoc" if value.as_bool() == Some(true) => {
                 options.jsdoc = Some(JsdocOptions::default());
+            }
+            "wrapClassNames" => {
+                let parse_list = |v: Option<&serde_json::Value>| {
+                    v.and_then(|v| v.as_array())
+                        .map(|a| {
+                            a.iter().filter_map(|s| s.as_str().map(ToString::to_string)).collect()
+                        })
+                        .unwrap_or_default()
+                };
+                if value.as_bool() == Some(true) {
+                    options.wrap_class_names = Some(WrapClassNamesOptions::default());
+                } else if let Some(obj) = value.as_object() {
+                    options.wrap_class_names = Some(WrapClassNamesOptions {
+                        attributes: parse_list(obj.get("attributes")),
+                        functions: parse_list(obj.get("functions")),
+                        syntax_transformation: obj
+                            .get("syntaxTransformation")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                    });
+                }
             }
             _ => {}
         }

@@ -82,7 +82,7 @@ The core is parameterized over a consumer-supplied context so it stays language-
   - Formatter crates only invoke it via `FormatSession::dispatch`
 - Parent and child share one arena, one `GroupId` space, and one Tailwind class scope through the session
   - A child adds classes straight into the parent's index space, so its doc is written as-is (no remap)
-  - A root formatter opens a fresh scope (`with_new_tailwind_scope`) and sorts it when finalizing its `Document` (`take_sorted_tailwind_classes`)
+  - A root formatter opens a fresh scope (`with_new_tailwind_scope`) and sorts it when finalizing its `Document` (`take_sorted_tailwind_classes`), except the classes registered with `add_unsorted_class`
 - A language crate's `format_to_ir` entry returns `EmbeddedIr`, one shape for every child language, no per-crate tuples
 - Only language-pair specific data crosses as `dyn Any`, core never learns concrete languages:
   - When the parent picks the child language, it passes the pair's own data (css-in-js's `CssInJsTemplate`, html-in-js's `has_multiple_root_elements`)

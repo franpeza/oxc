@@ -137,6 +137,7 @@ impl ResolvedDispatchConfig {
                     &self.config,
                     self.validated.core,
                     self.validated.sort_imports.clone(),
+                    self.validated.wrap_class_names.clone(),
                 )
             })
             .clone()
@@ -373,7 +374,11 @@ mod tests {
     fn dispatch_config() -> Arc<ResolvedDispatchConfig> {
         Arc::new(ResolvedDispatchConfig::new(
             Arc::new(FormatConfig::default()),
-            Arc::new(ValidatedOptions { core: CoreFormatOptions::default(), sort_imports: None }),
+            Arc::new(ValidatedOptions {
+                core: CoreFormatOptions::default(),
+                sort_imports: None,
+                wrap_class_names: None,
+            }),
         ))
     }
 

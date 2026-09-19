@@ -140,9 +140,40 @@ pub fn format_options_display(json: &OptionSet) -> String {
     if json.is_empty() {
         return "{}".to_string();
     }
-    let mut parts: Vec<_> = json.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+    let mut parts: Vec<_> =
+        json.iter().map(|(k, v)| format!("{k}: {}", sorted_value_display(v))).collect();
     parts.sort();
     format!("{{ {} }}", parts.join(", "))
+}
+
+/// Renders a value with every object's keys sorted.
+///
+/// `serde_json::Value`'s own `Display` keeps insertion order when the
+/// `preserve_order` feature is on, and Cargo enables it for the whole build as
+/// soon as one crate in the command wants it (`oxc_linter` does). Sorting here
+/// keeps the header, and so the snapshot, the same in every build.
+fn sorted_value_display(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut entries: Vec<_> = map
+                .iter()
+                .map(|(key, value)| {
+                    format!(
+                        "{}:{}",
+                        serde_json::Value::from(key.as_str()),
+                        sorted_value_display(value)
+                    )
+                })
+                .collect();
+            entries.sort();
+            format!("{{{}}}", entries.join(","))
+        }
+        serde_json::Value::Array(items) => {
+            let entries: Vec<_> = items.iter().map(sorted_value_display).collect();
+            format!("[{}]", entries.join(","))
+        }
+        other => other.to_string(),
+    }
 }
 
 /// Snapshot-body invariant: the configured `endOfLine` is applied to every output line break.

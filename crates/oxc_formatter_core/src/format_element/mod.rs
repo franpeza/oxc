@@ -74,6 +74,11 @@ pub enum FormatElement<'a> {
     /// A [Tag] that marks the start/end of some content to which some special formatting is applied.
     Tag(Tag),
 
+    /// Ends a best-fitting variant (right before its closing entry tag) that is tested on its own:
+    /// the content following the best fitting element on the same line doesn't count toward whether it fits.
+    /// Prints nothing.
+    MeasureAlone,
+
     /// A Tailwind CSS class sorting marker.
     /// The usize is an index into the collected tailwind classes array.
     /// During printing, this will be replaced with the sorted class name.
@@ -106,6 +111,7 @@ impl std::fmt::Debug for FormatElement<'_> {
             FormatElement::EmbedPlaceholder(index) => {
                 fmt.debug_tuple("EmbedPlaceholder").field(index).finish()
             }
+            FormatElement::MeasureAlone => write!(fmt, "MeasureAlone"),
         }
     }
 }
@@ -175,6 +181,16 @@ pub struct Interned<'a>(&'a [FormatElement<'a>]);
 impl<'a> Interned<'a> {
     pub(crate) fn new(content: ArenaVec<'a, FormatElement<'a>>) -> Self {
         Self(content.into_arena_slice())
+    }
+
+    /// Wraps already arena-allocated content (e.g. a rebuilt copy of [`Self::as_slice`]).
+    pub fn from_slice(content: &'a [FormatElement<'a>]) -> Self {
+        Self(content)
+    }
+
+    /// The interned content, with the arena lifetime (unlike `Deref`).
+    pub fn as_slice(&self) -> &'a [FormatElement<'a>] {
+        self.0
     }
 }
 
@@ -278,7 +294,8 @@ impl FormatElements for FormatElement<'_> {
             | FormatElement::Space
             | FormatElement::Tag(_)
             | FormatElement::TailwindClass(_)
-            | FormatElement::EmbedPlaceholder(_) => false,
+            | FormatElement::EmbedPlaceholder(_)
+            | FormatElement::MeasureAlone => false,
         }
     }
 

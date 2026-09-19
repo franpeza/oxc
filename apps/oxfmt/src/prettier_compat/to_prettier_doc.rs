@@ -420,6 +420,8 @@ fn convert_elements(
                 }
                 printer.line = LineState::Content;
             }
+            // Prettier's `conditionalGroup` always measures the rest of the line.
+            FormatElement::MeasureAlone => {}
             FormatElement::EmbedPlaceholder(index) => {
                 // The host splices `${expr}` for each marker before the IR is finalized,
                 // so one should never reach Doc conversion.

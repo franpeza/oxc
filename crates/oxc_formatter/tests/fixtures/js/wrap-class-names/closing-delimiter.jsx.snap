@@ -1,0 +1,60 @@
+---
+source: crates/oxc_formatter/tests/fixtures/mod.rs
+---
+==================== Input ====================
+// The closing quote counts toward the last line's width: at print width 80
+// the last class moves down instead of ending the line at column 81.
+const a = (
+  <button type="button" className="text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 abcdef">
+    x
+  </button>
+);
+
+// Same for the closing backtick of a template.
+const b = clsx(`text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 abcdef`);
+
+==================== Output ====================
+---------------------------------------------------------------
+{ printWidth: 80, wrapClassNames: {"functions":["clsx","tw"]} }
+---------------------------------------------------------------
+// The closing quote counts toward the last line's width: at print width 80
+// the last class moves down instead of ending the line at column 81.
+const a = (
+  <button
+    type="button"
+    className="text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm
+      text-sm px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3
+      abcdef"
+  >
+    x
+  </button>
+);
+
+// Same for the closing backtick of a template.
+const b = clsx(
+  `text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm px-3
+  px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 abcdef`,
+);
+
+----------------------------------------------------------------
+{ printWidth: 100, wrapClassNames: {"functions":["clsx","tw"]} }
+----------------------------------------------------------------
+// The closing quote counts toward the last line's width: at print width 80
+// the last class moves down instead of ending the line at column 81.
+const a = (
+  <button
+    type="button"
+    className="text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm px-3 px-3
+      px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 px-3 abcdef"
+  >
+    x
+  </button>
+);
+
+// Same for the closing backtick of a template.
+const b = clsx(
+  `text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm text-sm px-3 px-3 px-3 px-3 px-3
+  px-3 px-3 px-3 px-3 px-3 px-3 px-3 abcdef`,
+);
+
+===================== End =====================

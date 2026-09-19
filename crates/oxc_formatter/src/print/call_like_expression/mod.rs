@@ -4,12 +4,12 @@ use oxc_ast::ast::*;
 
 use crate::{
     ast_nodes::AstNode,
-    formatter::{TailwindContextEntry, prelude::*},
+    formatter::prelude::*,
     utils::{
         call_expression::{callee_opener, is_test_call_expression},
         member_chain::MemberChain,
         statement_body::FormatBeforeOpener,
-        tailwindcss::is_tailwind_function_call,
+        tailwindcss::class_function_context,
     },
     write,
 };
@@ -23,24 +23,22 @@ impl<'a> FormatWrite<'a> for AstNode<'a, CallExpression<'a>> {
         let type_arguments = self.type_arguments();
         let arguments = self.arguments();
 
-        // Check if this is a Tailwind function call (e.g., clsx, cn, tw)
-        let is_tailwind_call = f
-            .options()
-            .sort_tailwindcss
-            .as_ref()
-            .is_some_and(|opts| is_tailwind_function_call(&self.callee, opts));
+        // Check if this is a class-context function call (e.g., clsx, cn, tw)
+        // for Tailwind sorting and/or class wrapping
+        let class_call_ctx = class_function_context(&self.callee, f.options());
 
-        // For nested non-Tailwind calls inside a Tailwind context, disable sorting
+        // For nested non-class calls inside a class context, disable class handling
         // to prevent sorting strings inside the nested call's arguments.
         // (e.g., `classNames("a", x.includes("\n") ? "b" : "c")` - don't sort "\n")
-        let was_disabled =
-            if !is_tailwind_call && let Some(ctx) = f.context_mut().tailwind_context_mut() {
-                let was = ctx.disabled;
-                ctx.disabled = true;
-                Some(was)
-            } else {
-                None
-            };
+        let was_disabled = if class_call_ctx.is_none()
+            && let Some(ctx) = f.context_mut().class_context_mut()
+        {
+            let was = ctx.disabled;
+            ctx.disabled = true;
+            Some(was)
+        } else {
+            None
+        };
 
         if matches!(
             callee.as_ref(),
@@ -61,26 +59,17 @@ impl<'a> FormatWrite<'a> for AstNode<'a, CallExpression<'a>> {
                     ]
                 );
 
-                // If this IS a Tailwind function call, push the Tailwind context
-                let tailwind_ctx_to_push = if is_tailwind_call {
-                    f.options()
-                        .sort_tailwindcss
-                        .as_ref()
-                        .map(|opts| TailwindContextEntry::new(opts.preserve_whitespace))
-                } else {
-                    None
-                };
-
-                // Push Tailwind context before formatting arguments
-                if let Some(ctx) = tailwind_ctx_to_push {
-                    f.context_mut().push_tailwind_context(ctx);
+                // If this IS a class-context call, push the class context
+                // before formatting arguments
+                if let Some(ctx) = class_call_ctx {
+                    f.context_mut().push_class_context(ctx);
                 }
 
                 write!(f, arguments);
 
-                // Pop Tailwind context after formatting
-                if tailwind_ctx_to_push.is_some() {
-                    f.context_mut().pop_tailwind_context();
+                // Pop class context after formatting
+                if class_call_ctx.is_some() {
+                    f.context_mut().pop_class_context();
                 }
             });
             if matches!(callee.as_ref(), Expression::CallExpression(_)) {
@@ -92,7 +81,7 @@ impl<'a> FormatWrite<'a> for AstNode<'a, CallExpression<'a>> {
 
         // Restore the previous disabled state
         if let Some(was) = was_disabled
-            && let Some(ctx) = f.context_mut().tailwind_context_mut()
+            && let Some(ctx) = f.context_mut().class_context_mut()
         {
             ctx.disabled = was;
         }
