@@ -475,6 +475,9 @@ where
                         ]
                     );
                 }
+                FormatElement::MeasureAlone => {
+                    w!(f, [token("measure_alone")]);
+                }
             }
         }
 

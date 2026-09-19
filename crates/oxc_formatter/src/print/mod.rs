@@ -87,7 +87,7 @@ use crate::{
             write_trailing_comments_before,
         },
         string::{FormatLiteralStringToken, StringLiteralParentKind},
-        tailwindcss::{tailwind_context_for_string_literal, write_tailwind_string_literal},
+        tailwindcss::{class_context_for_string_literal, write_class_string_literal},
         typecast::is_cast_target,
     },
     write,
@@ -1213,13 +1213,13 @@ impl<'a> FormatWrite<'a> for AstNode<'a, NumericLiteral<'a>> {
 
 impl<'a> FormatWrite<'a> for AstNode<'a, StringLiteral<'a>> {
     fn write(&self, f: &mut JsFormatter<'_, 'a>) {
-        // Check if we're in a Tailwind context via stack (O(1) lookup)
+        // Check if we're in a class context via stack (O(1) lookup)
         // This handles nested string literals inside JSXAttribute/CallExpression values
-        if let Some(ctx) = tailwind_context_for_string_literal(self, f) {
-            // We're inside a Tailwind context - sort this string literal as Tailwind classes
-            write_tailwind_string_literal(self, ctx, f);
+        if let Some(ctx) = class_context_for_string_literal(self, f) {
+            // We're inside a class context - sort and/or wrap this string literal's classes
+            write_class_string_literal(self, ctx, f);
         } else {
-            // Not in Tailwind context - use normal string literal formatting
+            // Not in a class context - use normal string literal formatting
             let is_jsx = matches!(self.parent(), AstNodes::JSXAttribute(_));
             FormatLiteralStringToken::new(
                 f.source_text().text_for(self),

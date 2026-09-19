@@ -260,6 +260,41 @@ pub struct FormatConfig {
     #[serde(alias = "experimentalTailwindcss")]
     pub sort_tailwindcss: Option<SortTailwindcssUserConfig>,
 
+    /// Wrap long class strings across multiple lines to fit the print width.
+    ///
+    /// Like [prettier-plugin-classnames](https://github.com/ony3000/prettier-plugin-classnames):
+    /// when a class string (a JSX `class`/`className` attribute, or a string or
+    /// template argument of a configured function/tag) exceeds the print width,
+    /// its classes wrap onto continuation lines. Lines of an attribute value, or
+    /// of any class string inside a ternary, sit one level deeper than the line
+    /// the string starts on; elsewhere they keep that line's indentation.
+    ///
+    /// Works independently of `sortTailwindcss`; when both are enabled,
+    /// classes are sorted first and then wrapped.
+    ///
+    /// In expression positions the delimiter converts both ways, like the
+    /// plugin: a plain string (e.g. `clsx("...")`) becomes a backtick
+    /// template when — and only when — it has to wrap, and an expression-free
+    /// template normalizes back to a quoted string when it fits on one line.
+    /// JSX attribute values wrap in place (their strings may contain literal
+    /// newlines; see `syntaxTransformation`) and tagged templates keep their backticks.
+    /// Strings covered by `sortTailwindcss.preserveWhitespace` are not wrapped.
+    ///
+    /// NOTE: Wrapping puts a newline inside the class string. In React projects
+    /// using the React Compiler, that can cause hydration mismatches; see
+    /// `wrapClassNames.syntaxTransformation`.
+    ///
+    /// Not fully compatible with the plugin: object keys are not wrapped, and
+    /// in a template literal with `${...}` only the classes between the
+    /// expressions wrap.
+    ///
+    /// Pass `true` or an object to enable with defaults, or omit/set `false` to disable.
+    ///
+    /// - Languages: JS, JSX, TS, TSX
+    /// - Default: Disabled
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wrap_class_names: Option<WrapClassNamesUserConfig>,
+
     /// Enable JSDoc comment formatting.
     ///
     /// When enabled, JSDoc comments are normalized and reformatted:
@@ -803,6 +838,61 @@ pub struct SortTailwindcssConfig {
 }
 
 // ---
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(untagged)]
+pub enum WrapClassNamesUserConfig {
+    Bool(bool),
+    Object(WrapClassNamesConfig),
+}
+
+impl WrapClassNamesUserConfig {
+    pub fn into_config(self) -> Option<WrapClassNamesConfig> {
+        match self {
+            Self::Bool(true) => Some(WrapClassNamesConfig::default()),
+            Self::Bool(false) => None,
+            Self::Object(config) => Some(config),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WrapClassNamesConfig {
+    /// List of additional attributes to wrap beyond `class` and `className` (exact match).
+    ///
+    /// NOTE: Regex patterns are not yet supported.
+    ///
+    /// - Default: `[]`
+    /// - Example: `["myClassProp"]`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<Vec<String>>,
+    /// List of function/tag names whose string and template arguments contain class strings (exact match).
+    ///
+    /// NOTE: Regex patterns are not yet supported.
+    ///
+    /// NOTE: Unlike the plugin, `classNames` is not supported out of the box; list it here to wrap it.
+    ///
+    /// - Default: `[]`
+    /// - Example: `["clsx", "cn", "tw"]`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub functions: Option<Vec<String>>,
+
+    /// Turn a JSX attribute string that wraps into an expression:
+    /// `class="..."` becomes `` class={`...`} ``.
+    ///
+    /// The transformation is one-way: the expression is not turned back into a
+    /// string when the class names fit on one line again.
+    ///
+    /// Enable this for React projects that run the React Compiler: Babel collapses
+    /// the wrap newline inside a JSX attribute string while SWC keeps it, so the
+    /// server and client builds disagree and hydration fails
+    /// (facebook/react#35481). Both keep a template literal unchanged.
+    ///
+    /// - Default: `false`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub syntax_transformation: Option<bool>,
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]

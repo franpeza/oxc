@@ -8,7 +8,7 @@ use crate::{
     formatter::{JsFormatter, JsFormatterExt as _},
     utils::{
         string::{FormatLiteralStringToken, StringLiteralParentKind},
-        tailwindcss::{tailwind_context_for_string_literal, write_tailwind_string_literal},
+        tailwindcss::{class_context_for_string_literal, write_class_string_literal},
     },
     write,
 };
@@ -23,11 +23,11 @@ pub fn format_property_key<'a>(
         return;
     }
 
-    // Check if we're in a Tailwind context and the key is a string literal with multiple classes
+    // Check if we're in a class context and the key is a string literal with multiple classes
     if let AstNodes::StringLiteral(string) = key.as_ast_nodes() {
-        if let Some(ctx) = tailwind_context_for_string_literal(string, f) {
-            // Reuse the existing Tailwind string literal writer
-            write_tailwind_string_literal(string, ctx, f);
+        if let Some(ctx) = class_context_for_string_literal(string, f) {
+            // Reuse the class string literal writer
+            write_class_string_literal(string, ctx, f);
             return;
         }
 
@@ -56,10 +56,10 @@ pub fn write_member_name<'a>(
     f: &mut JsFormatter<'_, 'a>,
 ) -> usize {
     if let AstNodes::StringLiteral(string) = key.as_ast_nodes() {
-        if let Some(ctx) = tailwind_context_for_string_literal(string, f) {
-            // Reuse the existing Tailwind string literal writer
+        if let Some(ctx) = class_context_for_string_literal(string, f) {
+            // Reuse the class string literal writer
             string.format_leading_comments(f);
-            write_tailwind_string_literal(string, ctx, f);
+            write_class_string_literal(string, ctx, f);
             string.format_trailing_comments(f);
 
             // Compute the normalized width based on the same cleaned string token

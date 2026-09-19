@@ -1,0 +1,4 @@
+[
+  { "wrapClassNames": { "attributes": ["myClassProp"] }, "printWidth": 80 },
+  { "wrapClassNames": true, "printWidth": 80, "useTabs": true }
+]

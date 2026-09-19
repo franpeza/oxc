@@ -194,8 +194,8 @@ pub fn resolve_for_embedded_js(
     config: FormatConfig,
     parent_filepath: PathBuf,
 ) -> Result<EmbeddedCallbackResolved, String> {
-    let ValidatedOptions { core, sort_imports } = validate(&config)?;
-    let format_options = Box::new(to_oxc_formatter(&config, core, sort_imports));
+    let ValidatedOptions { core, sort_imports, wrap_class_names } = validate(&config)?;
+    let format_options = Box::new(to_oxc_formatter(&config, core, sort_imports, wrap_class_names));
     Ok(EmbeddedCallbackResolved { format_options, config: Arc::new(config), core, parent_filepath })
 }
 

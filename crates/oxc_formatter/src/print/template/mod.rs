@@ -13,7 +13,7 @@ use crate::{
     ast_nodes::{AstNode, AstNodeIterator},
     format_args,
     formatter::{
-        TailwindContextEntry,
+        ClassContext,
         prelude::{document::Document, *},
         trivia::{FormatLeadingComments, FormatTrailingComments},
     },
@@ -21,7 +21,10 @@ use crate::{
         call_expression::is_test_each_pattern,
         expression::is_member_expression_without_chain_wrappers,
         format_node_without_trailing_comments::FormatNodeWithoutTrailingComments,
-        tailwindcss::{is_tailwind_function_call, write_tailwind_template_element},
+        tailwindcss::{
+            class_function_context, narrow_class_context, try_wrap_convert_template,
+            write_class_template_element,
+        },
     },
     write,
 };
@@ -44,6 +47,11 @@ impl<'a> FormatWrite<'a> for AstNode<'a, TemplateLiteral<'a>> {
         }
         // Language comment: /* HTML */ `...` or /* GraphQL */ `...`
         if embed::try_format_comment_embedded(self, f) {
+            return;
+        }
+        // Delimiter conversion in wrapping class contexts (`wrap_class_names`):
+        // an eligible template prints as a quoted string when it fits.
+        if try_wrap_convert_template(self, f) {
             return;
         }
         let template = TemplateLike::TemplateLiteral(self);
@@ -96,17 +104,13 @@ impl<'a> FormatWrite<'a> for AstNode<'a, TaggedTemplateExpression<'a>> {
 
         write!(f, [line_suffix_boundary()]);
 
-        // Check if this is a Tailwind function call (e.g., tw`flex p-4`)
+        // Check if this is a class-context tag (e.g., tw`flex p-4`) for
+        // sorting and/or wrapping.
         // Extract context entry before mutating f
-        let tailwind_ctx_to_push = f
-            .options()
-            .sort_tailwindcss
-            .as_ref()
-            .filter(|opts| is_tailwind_function_call(&self.tag, opts))
-            .map(|opts| TailwindContextEntry::new(opts.preserve_whitespace));
+        let class_ctx_to_push = class_function_context(&self.tag, f.options());
 
-        if let Some(ctx) = tailwind_ctx_to_push {
-            f.context_mut().push_tailwind_context(ctx);
+        if let Some(ctx) = class_ctx_to_push {
+            f.context_mut().push_class_context(ctx);
         }
 
         if embed::try_format_embedded_template(self, f) {
@@ -119,8 +123,8 @@ impl<'a> FormatWrite<'a> for AstNode<'a, TaggedTemplateExpression<'a>> {
             write!(f, template);
         }
 
-        if tailwind_ctx_to_push.is_some() {
-            f.context_mut().pop_tailwind_context();
+        if class_ctx_to_push.is_some() {
+            f.context_mut().pop_class_context();
         }
     }
 }
@@ -129,15 +133,15 @@ impl<'a> FormatWrite<'a> for AstNode<'a, TemplateElement<'a>> {
     fn write(&self, f: &mut JsFormatter<'_, 'a>) {
         let source = f.source_text().text_for(self);
 
-        // Check if we're in a Tailwind context via the stack
+        // Check if we're in a class context via the stack
         // (handles JSXAttribute, CallExpression, TaggedTemplateExpression, and nested contexts)
-        let tailwind_ctx = f.context().tailwind_context().copied().filter(|_| {
+        let class_ctx = f.context().class_context().copied().filter(|ctx| {
             // No whitespace means only one class, so no need to sort
-            source.as_bytes().iter().any(|&b| b.is_ascii_whitespace())
+            ctx.is_active() && source.as_bytes().iter().any(|&b| b.is_ascii_whitespace())
         });
 
-        if let Some(ctx) = tailwind_ctx {
-            write_tailwind_template_element(self, ctx, f);
+        if let Some(ctx) = class_ctx {
+            write_class_template_element(self, ctx, f);
         } else {
             write!(f, text(self.value.raw.as_str()));
         }
@@ -263,65 +267,73 @@ impl<'a> Format<'a, JsFormatContext<'a>> for TemplateLike<'a, '_> {
             Self::TSTemplateLiteralType(t) => TemplateExpressionIterator::TSType(t.types().iter()),
         };
 
-        // Check if we're in a Tailwind context - if so, we need to push expression context
-        let tailwind_ctx = f.context().tailwind_context().copied();
+        // Check if we're in a class context - if so, we need to push expression context.
+        // A template outside a class position still pushes its (inactive) context,
+        // so its quasis don't pick up the enclosing one.
+        let class_ctx = f.context().class_context().copied().map(|ctx| match self {
+            Self::TemplateLiteral(t) => {
+                narrow_class_context(ctx, t.span, t.ancestors(), f.options())
+            }
+            Self::TSTemplateLiteralType(t) => {
+                narrow_class_context(ctx, t.span, t.ancestors(), f.options())
+            }
+        });
 
-        // When in Tailwind context with preserve_whitespace false, newlines are collapsed
-        let tailwind_collapses_newlines = tailwind_ctx.is_some_and(|ctx| !ctx.preserve_whitespace);
+        // When in a class context with preserve_whitespace false, newlines are collapsed
+        let class_ctx_collapses_newlines =
+            class_ctx.is_some_and(|ctx| ctx.is_active() && !ctx.preserve_whitespace);
 
         let quasis_len = quasis.len();
 
         for (i, quasi) in quasis.iter().enumerate() {
-            // If in Tailwind context, push context with quasi position for boundary detection
-            if let Some(ctx) = tailwind_ctx {
+            // If in a class context, push context with quasi position for boundary detection
+            if let Some(ctx) = class_ctx {
                 let is_first = i == 0;
                 let is_last = i == quasis_len - 1;
-                f.context_mut().push_tailwind_context(ctx.with_quasi_position(is_first, is_last));
+                f.context_mut().push_class_context(ctx.with_quasi_position(is_first, is_last));
             }
 
             write!(f, *quasi);
 
             // Pop quasi position context
-            if tailwind_ctx.is_some() {
-                f.context_mut().pop_tailwind_context();
+            if class_ctx.is_some() {
+                f.context_mut().pop_class_context();
             }
 
             let quasi_text = quasi.value.raw.as_str();
 
             if let Some(expr) = expression_iterator.next() {
                 // Only calculate indention if newlines are NOT being collapsed
-                if !tailwind_collapses_newlines {
+                if !class_ctx_collapses_newlines {
                     let tab_width = u32::from(f.options().indent_width.value());
                     indention = TemplateElementIndention::after_last_new_line(
                         quasi_text, tab_width, indention,
                     );
                 }
-                // When Tailwind collapses newlines, treat as if there's no newline
-                let after_new_line = !tailwind_collapses_newlines && quasi_text.ends_with('\n');
+                // When the class context collapses newlines, treat as if there's no newline
+                let after_new_line = !class_ctx_collapses_newlines && quasi_text.ends_with('\n');
                 let options = FormatTemplateExpressionOptions { indention, after_new_line };
 
-                // If in Tailwind context, push template expression context with quasi whitespace info
-                if let Some(ctx) = tailwind_ctx {
+                // If in a class context, push template expression context with quasi whitespace info
+                if let Some(ctx) = class_ctx {
                     let quasi_before_has_trailing_ws =
                         quasi_text.ends_with(|c: char| c.is_ascii_whitespace());
                     let quasi_after_has_leading_ws = quasis.get(i + 1).is_some_and(|q| {
                         q.value.raw.as_str().starts_with(|c: char| c.is_ascii_whitespace())
                     });
 
-                    f.context_mut().push_tailwind_context(
-                        TailwindContextEntry::template_expression(
-                            ctx,
-                            quasi_before_has_trailing_ws,
-                            quasi_after_has_leading_ws,
-                        ),
-                    );
+                    f.context_mut().push_class_context(ClassContext::template_expression(
+                        ctx,
+                        quasi_before_has_trailing_ws,
+                        quasi_after_has_leading_ws,
+                    ));
                 }
 
                 FormatTemplateExpression::new(&expr, options).fmt(f);
 
                 // Pop the template expression context
-                if tailwind_ctx.is_some() {
-                    f.context_mut().pop_tailwind_context();
+                if class_ctx.is_some() {
+                    f.context_mut().pop_class_context();
                 }
             }
         }

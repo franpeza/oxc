@@ -55,6 +55,29 @@ After changing AST shapes or the generators, regenerate with `just ast`, never h
 - Classes are collected during IR construction and sorted in one batch when the IR is stringified
 - Requires the session's `TailwindSorter` service (the sort itself is delegated to the host)
 
+### Wrap class names (`utils/tailwindcss.rs`, `ir_transform/wrap_class_names/`)
+
+- Derived from `prettier-plugin-classnames`, but not fully compatible
+  - object keys are not wrapped, and a template literal with `${...}` wraps only between its expressions
+  - only strings in a class position wrap (`narrow_class_context`); the plugin also wraps a template in a comparison
+    or in the argument of a nested non-class call, changing that value
+  - with `syntaxTransformation`, an attribute string holding an HTML character reference (`&amp;`) keeps its quotes
+    and wraps in place: JSX decodes the reference in an attribute string but not in a template
+  - with `syntaxTransformation`, the plugin measures a string where Prettier first printed it, so it may convert
+    (and not revert) a string that fits once its attribute moves onto its own line; its output then changes on a
+    second pass, ours wraps only what overflows where it is printed
+  - `classNames` is not wrapped out of the box (the plugin always supports it); list it in `functions`
+  - inside a ternary branch indented with spaces and a `tabWidth` other than 2, wrapped lines keep the branch's
+    2-space alignment; the plugin rounds the start line down to whole indent levels, which the printer cannot express
+  - `endingPosition` and `classnamesPrintWidth` are not supported: both need a per-content line width in the printer,
+    which every file would pay for whether or not the option is on (measured at 1-3% of format time)
+- A wrapped JSX attribute string carries the newline into the runtime `className`.
+  Babel collapses it and SWC does not (verified), so a React Compiler build hydrates with a mismatch
+  (facebook/react#35481, prettier-plugin-classnames#113); `syntaxTransformation` prints a template literal instead, which both keep
+- Shares the class context and class collection with Tailwind sorting; strings targeted only by wrapping are never sent to the sorter
+- Wrapped classes are marked by index during IR construction and expanded into a `fill` after sorting (`formatter::format` → `ir_transform/wrap_class_names/`); requires no `SessionServices`, so it also works in the pure Rust build
+- Covered by `tests/fixtures/js/wrap-class-names/`, whose expected output matches the plugin's except where the points above apply
+
 ### Embedded language formatting
 
 Two directions: xxx-in-js (e.g. CSS in template literals) and js-in-xxx (e.g. Vue `script` block).

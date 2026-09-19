@@ -4,7 +4,7 @@ use oxc_formatter::{
     ArrowParentheses, AttributePosition, BracketSameLine, BracketSpacing, CommentLineStrategy,
     CustomGroupDefinition, Expand, GroupEntry, ImportModifier, ImportSelector, JsFormatOptions,
     JsdocOptions, LineWrappingStyle, OperatorPosition, QuoteProperties, QuoteStyle, Semicolons,
-    SortImportsOptions, SortOrder, TrailingCommas,
+    SortImportsOptions, SortOrder, TrailingCommas, WrapClassNamesOptions,
 };
 use oxc_formatter_core::{CoreFormatOptions, FormatOptions};
 
@@ -14,17 +14,19 @@ use super::super::oxfmtrc::{
     ArrowParensConfig, CommentLineStrategyConfig, FormatConfig, HtmlWhitespaceSensitivityConfig,
     ImportModifierConfig, ImportSelectorConfig, JsdocUserConfig, LineWrappingStyleConfig,
     ObjectWrapConfig, OperatorPositionConfig, QuotePropsConfig, SortGroupItemConfig,
-    SortImportsUserConfig, SortOrderConfig, TrailingCommaConfig,
+    SortImportsUserConfig, SortOrderConfig, TrailingCommaConfig, WrapClassNamesUserConfig,
 };
 
 /// Convert `FormatConfig` into `JsFormatOptions` for `oxc_formatter`.
 ///
 /// NOTE: Pure field translation:
-/// `core` and `sort_imports` are the validation gate's artifacts ([`super::validate::validate()`]), so this cannot fail.
+/// `core`, `sort_imports` and `wrap_class_names` are the validation gate's artifacts
+/// ([`super::validate::validate()`]), so this cannot fail.
 pub fn to_oxc_formatter(
     config: &FormatConfig,
     core_options: CoreFormatOptions,
     sort_imports: Option<SortImportsOptions>,
+    wrap_class_names: Option<WrapClassNamesOptions>,
 ) -> JsFormatOptions {
     let mut format_options = JsFormatOptions::default();
     format_options.apply_core(core_options);
@@ -137,7 +139,23 @@ pub fn to_oxc_formatter(
         });
     }
 
+    format_options.wrap_class_names = wrap_class_names;
+
     format_options
+}
+
+/// Derive [`WrapClassNamesOptions`] from the resolved config.
+///
+/// Like [`to_sort_imports`], the gate ([`super::validate::validate()`]) runs it once.
+pub(super) fn to_wrap_class_names(config: &FormatConfig) -> Option<WrapClassNamesOptions> {
+    let wrap_config =
+        config.wrap_class_names.clone().and_then(WrapClassNamesUserConfig::into_config)?;
+
+    Some(WrapClassNamesOptions {
+        attributes: wrap_config.attributes.unwrap_or_default(),
+        functions: wrap_config.functions.unwrap_or_default(),
+        syntax_transformation: wrap_config.syntax_transformation.unwrap_or(false),
+    })
 }
 
 /// Derive [`SortImportsOptions`] from the resolved config;
@@ -330,7 +348,12 @@ mod tests {
     /// Production shape: the gate validates/derives, then the infallible mapper builds.
     fn build(config: &FormatConfig) -> Result<JsFormatOptions, String> {
         let validated = validate(config)?;
-        Ok(to_oxc_formatter(config, validated.core, validated.sort_imports))
+        Ok(to_oxc_formatter(
+            config,
+            validated.core,
+            validated.sort_imports,
+            validated.wrap_class_names,
+        ))
     }
 
     /// The config enums mirror `oxc_formatter`'s (which deliberately carries no

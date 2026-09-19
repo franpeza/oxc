@@ -1,0 +1,3 @@
+[
+  { "wrapClassNames": { "functions": ["clsx", "tw"] }, "printWidth": 80 }
+]

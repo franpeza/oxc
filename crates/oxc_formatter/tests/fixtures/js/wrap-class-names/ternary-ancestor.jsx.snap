@@ -1,0 +1,200 @@
+---
+source: crates/oxc_formatter/tests/fixtures/mod.rs
+---
+==================== Input ====================
+// A class string anywhere inside a ternary wraps one level deeper than the
+// line it starts on, as in prettier-plugin-classnames.
+const a = cond ? <A className={clsx(`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md`, x)} /> : null;
+const b = cond ? clsx(`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md`, x) : null;
+const c = cond ? <A className="after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md" /> : null;
+const d = cond ? null : <A className={`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md`} />;
+const e = cond ? null : <div><A className={clsx(`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md`, x)} /></div>;
+const f = a && b ? <A className={clsx(cond2 ? `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md` : "", x)} /> : null;
+const g = cond ? { k: clsx(`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md`, x) } : null;
+const h = cond ? () => clsx(`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md ${y}`) : null;
+const i = cond ? (clsx(`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md`)) : null;
+const j = clsx(cond ? (`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md`) : "");
+const k = clsx(`after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500 rounded-md`, x);
+
+==================== Output ====================
+---------------------------------------------------------------
+{ printWidth: 80, wrapClassNames: {"functions":["clsx","tw"]} }
+---------------------------------------------------------------
+// A class string anywhere inside a ternary wraps one level deeper than the
+// line it starts on, as in prettier-plugin-classnames.
+const a = cond ? (
+  <A
+    className={clsx(
+      `after:absolute after:inset-0 focus-visible:after:ring-2
+        focus-visible:after:ring-blue-500 rounded-md`,
+      x,
+    )}
+  />
+) : null;
+const b = cond
+  ? clsx(
+      `after:absolute after:inset-0 focus-visible:after:ring-2
+        focus-visible:after:ring-blue-500 rounded-md`,
+      x,
+    )
+  : null;
+const c = cond ? (
+  <A
+    className="after:absolute after:inset-0 focus-visible:after:ring-2
+      focus-visible:after:ring-blue-500 rounded-md"
+  />
+) : null;
+const d = cond ? null : (
+  <A
+    className={`after:absolute after:inset-0 focus-visible:after:ring-2
+      focus-visible:after:ring-blue-500 rounded-md`}
+  />
+);
+const e = cond ? null : (
+  <div>
+    <A
+      className={clsx(
+        `after:absolute after:inset-0 focus-visible:after:ring-2
+          focus-visible:after:ring-blue-500 rounded-md`,
+        x,
+      )}
+    />
+  </div>
+);
+const f =
+  a && b ? (
+    <A
+      className={clsx(
+        cond2
+          ? `after:absolute after:inset-0 focus-visible:after:ring-2
+            focus-visible:after:ring-blue-500 rounded-md`
+          : "",
+        x,
+      )}
+    />
+  ) : null;
+const g = cond
+  ? {
+      k: clsx(
+        `after:absolute after:inset-0 focus-visible:after:ring-2
+          focus-visible:after:ring-blue-500 rounded-md`,
+        x,
+      ),
+    }
+  : null;
+const h = cond
+  ? () =>
+      clsx(
+        `after:absolute after:inset-0 focus-visible:after:ring-2
+          focus-visible:after:ring-blue-500 rounded-md ${y}`,
+      )
+  : null;
+const i = cond
+  ? clsx(
+      `after:absolute after:inset-0 focus-visible:after:ring-2
+        focus-visible:after:ring-blue-500 rounded-md`,
+    )
+  : null;
+const j = clsx(
+  cond
+    ? `after:absolute after:inset-0 focus-visible:after:ring-2
+      focus-visible:after:ring-blue-500 rounded-md`
+    : "",
+);
+const k = clsx(
+  `after:absolute after:inset-0 focus-visible:after:ring-2
+  focus-visible:after:ring-blue-500 rounded-md`,
+  x,
+);
+
+----------------------------------------------------------------
+{ printWidth: 100, wrapClassNames: {"functions":["clsx","tw"]} }
+----------------------------------------------------------------
+// A class string anywhere inside a ternary wraps one level deeper than the
+// line it starts on, as in prettier-plugin-classnames.
+const a = cond ? (
+  <A
+    className={clsx(
+      `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500
+        rounded-md`,
+      x,
+    )}
+  />
+) : null;
+const b = cond
+  ? clsx(
+      `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500
+        rounded-md`,
+      x,
+    )
+  : null;
+const c = cond ? (
+  <A
+    className="after:absolute after:inset-0 focus-visible:after:ring-2
+      focus-visible:after:ring-blue-500 rounded-md"
+  />
+) : null;
+const d = cond ? null : (
+  <A
+    className={`after:absolute after:inset-0 focus-visible:after:ring-2
+      focus-visible:after:ring-blue-500 rounded-md`}
+  />
+);
+const e = cond ? null : (
+  <div>
+    <A
+      className={clsx(
+        `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500
+          rounded-md`,
+        x,
+      )}
+    />
+  </div>
+);
+const f =
+  a && b ? (
+    <A
+      className={clsx(
+        cond2
+          ? `after:absolute after:inset-0 focus-visible:after:ring-2
+            focus-visible:after:ring-blue-500 rounded-md`
+          : "",
+        x,
+      )}
+    />
+  ) : null;
+const g = cond
+  ? {
+      k: clsx(
+        `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500
+          rounded-md`,
+        x,
+      ),
+    }
+  : null;
+const h = cond
+  ? () =>
+      clsx(
+        `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500
+          rounded-md ${y}`,
+      )
+  : null;
+const i = cond
+  ? clsx(
+      `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500
+        rounded-md`,
+    )
+  : null;
+const j = clsx(
+  cond
+    ? `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500
+      rounded-md`
+    : "",
+);
+const k = clsx(
+  `after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-blue-500
+  rounded-md`,
+  x,
+);
+
+===================== End =====================

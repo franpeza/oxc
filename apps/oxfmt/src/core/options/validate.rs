@@ -1,9 +1,10 @@
-use oxc_formatter::SortImportsOptions;
+use oxc_formatter::{SortImportsOptions, WrapClassNamesOptions};
 use oxc_formatter_core::CoreFormatOptions;
 
 use super::{
-    super::oxfmtrc::FormatConfig, to_core_options::to_core_options,
-    to_oxc_formatter::to_sort_imports,
+    super::oxfmtrc::FormatConfig,
+    to_core_options::to_core_options,
+    to_oxc_formatter::{to_sort_imports, to_wrap_class_names},
 };
 
 /// The artifacts of the validation gate:
@@ -15,6 +16,7 @@ use super::{
 pub struct ValidatedOptions {
     pub core: CoreFormatOptions,
     pub sort_imports: Option<SortImportsOptions>,
+    pub wrap_class_names: Option<WrapClassNamesOptions>,
 }
 
 /// The eager validation gate during config resolution.
@@ -27,5 +29,9 @@ pub struct ValidatedOptions {
 /// # Errors
 /// Returns an error if any option value is invalid.
 pub fn validate(config: &FormatConfig) -> Result<ValidatedOptions, String> {
-    Ok(ValidatedOptions { core: to_core_options(config)?, sort_imports: to_sort_imports(config)? })
+    Ok(ValidatedOptions {
+        core: to_core_options(config)?,
+        sort_imports: to_sort_imports(config)?,
+        wrap_class_names: to_wrap_class_names(config),
+    })
 }

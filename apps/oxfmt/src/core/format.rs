@@ -162,6 +162,7 @@ impl FormatStrategy {
                     &config,
                     core,
                     validated.sort_imports.clone(),
+                    validated.wrap_class_names.clone(),
                 )),
                 config,
                 core,

@@ -1,5 +1,6 @@
 //! This module contains IR transforms for sorting and aesthetic features.
-//! Currently, it only includes import sorting (`sort_imports_chunk`).
+//! It includes import sorting (`sort_imports_chunk`) and class-string wrapping
+//! (`wrap_class_names`), which runs after the Tailwind class sort in `formatter::format`.
 //!
 //! Several approaches were considered:
 //! - 1. Sort at the AST level.
@@ -26,5 +27,7 @@
 //! - <https://github.com/oxc-project/oxc/pull/22065> (move to during-IR-construction)
 
 mod sort_imports;
+mod wrap_class_names;
 
 pub use sort_imports::*;
+pub use wrap_class_names::expand_wrap_markers;

@@ -60,6 +60,7 @@ export async function runMigratePrettier() {
   let hasTailwindcssPlugin = false;
   let hasSortPackageJsonPlugin = false;
   let hasSveltePlugin = false;
+  let hasClassnamesPlugin = false;
   for (const [key, value] of Object.entries(prettierConfig ?? {})) {
     // Handle plugins - check for known plugins and warn about others
     if (key === "plugins" && Array.isArray(value)) {
@@ -70,6 +71,11 @@ export async function runMigratePrettier() {
           hasSortPackageJsonPlugin = true;
         } else if (plugin === "prettier-plugin-svelte") {
           hasSveltePlugin = true;
+        } else if (plugin === "prettier-plugin-classnames") {
+          hasClassnamesPlugin = true;
+        } else if (plugin === "prettier-plugin-merge") {
+          // Only glue for running several plugins; Oxfmt needs no equivalent.
+          console.error(`  - plugins: "${plugin}" is not needed, skipping...`);
         } else if (typeof plugin === "string") {
           console.error(`  - plugins: "${plugin}" is not supported, skipping...`);
         } else {
@@ -97,9 +103,20 @@ export async function runMigratePrettier() {
       console.error(`  - "${key}" is not supported yet`);
       continue;
     }
+    // prettier-plugin-classnames options Oxfmt does not support yet
+    if (key === "endingPosition" || key === "classnamesPrintWidth") {
+      console.error(`  - "${key}" is not supported yet`);
+      continue;
+    }
 
     // Skip plugin-specific options - handled separately
-    if (key.startsWith("tailwind") || key.startsWith("svelte")) {
+    if (
+      key.startsWith("tailwind")
+      || key.startsWith("svelte")
+      || key === "customAttributes"
+      || key === "customFunctions"
+      || key === "syntaxTransformation"
+    ) {
       continue;
     }
 
@@ -137,6 +154,14 @@ export async function runMigratePrettier() {
   if (hasSveltePlugin) {
     oxfmtrc.svelte = migrateMappedOptions(prettierConfig!, SVELTE_OPTION_MAPPING);
     console.log("Migrated prettier-plugin-svelte options to svelte");
+  }
+  if (hasClassnamesPlugin) {
+    const wrapClassNames = migrateMappedOptions(prettierConfig!, CLASSNAMES_OPTION_MAPPING);
+    // The plugin always supports `classNames`, Oxfmt only what is listed.
+    const functions = Array.isArray(wrapClassNames.functions) ? wrapClassNames.functions : [];
+    wrapClassNames.functions = [...new Set([...functions, "classNames"])];
+    oxfmtrc.wrapClassNames = wrapClassNames;
+    console.log("Migrated prettier-plugin-classnames options to wrapClassNames");
   }
 
   // Migrate `ignorePatterns` from `.prettierignore`
@@ -219,6 +244,12 @@ const TAILWIND_OPTION_MAPPING: Record<string, string> = {
   attributes: "tailwindAttributes",
   preserveWhitespace: "tailwindPreserveWhitespace",
   preserveDuplicates: "tailwindPreserveDuplicates",
+};
+
+const CLASSNAMES_OPTION_MAPPING: Record<string, string> = {
+  attributes: "customAttributes",
+  functions: "customFunctions",
+  syntaxTransformation: "syntaxTransformation",
 };
 
 const SVELTE_OPTION_MAPPING: Record<string, string> = {

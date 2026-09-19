@@ -222,9 +222,9 @@ impl<'a> Printer<'a> {
                 self.state.pending_indent = indention;
             }
 
-            FormatElement::ExpandParent => {
-                // Handled in `Document::propagate_expands()
-            }
+            // `ExpandParent` is handled in `Document::propagate_expands()`,
+            // `MeasureAlone` only affects what `print_best_fitting` measures.
+            FormatElement::ExpandParent | FormatElement::MeasureAlone => {}
 
             FormatElement::LineSuffixBoundary => {
                 const HARD_BREAK: &FormatElement = &FormatElement::Line(LineMode::Hard);
@@ -477,14 +477,19 @@ impl<'a> Printer<'a> {
                 // args must be popped from the stack as soon as it sees the matching end entry.
                 let content = &variant[1..];
 
-                queue.extend_back(content);
                 stack.push(TagKind::Entry, entry_args);
-                let variant_fits = self.fits(queue, stack, indent_stack)?;
+                let variant_fits =
+                    if matches!(variant.iter().nth_back(1), Some(FormatElement::MeasureAlone)) {
+                        self.fits(&PrintQueue::new(content), stack, indent_stack)?
+                    } else {
+                        queue.extend_back(content);
+                        let fits = self.fits(queue, stack, indent_stack)?;
+                        // Remove the content slice because printing needs the variant WITH the start entry
+                        let popped_slice = queue.pop_slice();
+                        debug_assert_eq!(popped_slice, Some(content));
+                        fits
+                    };
                 stack.pop(TagKind::Entry)?;
-
-                // Remove the content slice because printing needs the variant WITH the start entry
-                let popped_slice = queue.pop_slice();
-                debug_assert_eq!(popped_slice, Some(content));
 
                 if variant_fits {
                     queue.extend_back(variant);
@@ -1504,7 +1509,8 @@ impl<'a, 'print> FitsMeasurer<'a, 'print> {
                 }
             }
             // Consumed by the host before printing; contributes no width here.
-            FormatElement::EmbedPlaceholder(_) => {}
+            // `MeasureAlone` only affects what `print_best_fitting` measures.
+            FormatElement::EmbedPlaceholder(_) | FormatElement::MeasureAlone => {}
         }
 
         Ok(Fits::Maybe)
