@@ -80,13 +80,19 @@ fn is_multiline_string_literal_attribute(
     let JSXAttributeItem::Attribute(attr) = attribute else {
         return false;
     };
-    !is_wrapped_class_attribute(attribute, options)
-        && attr.value.as_ref().is_some_and(|value| matches!(value, JSXAttributeValue::StringLiteral(string) if string.value.contains('\n')))
+    // The value check comes first: it is what this layout check has always
+    // done, and it is almost always false, so the class lookup rarely runs.
+    attr.value.as_ref().is_some_and(|value| matches!(value, JSXAttributeValue::StringLiteral(string) if string.value.contains('\n')))
+        && !is_wrapped_class_attribute(attribute, options)
 }
 
 /// Returns `true` if `wrap_class_names` wraps this attribute's value
 /// (strings kept verbatim by `sortTailwindcss.preserveWhitespace` are not wrapped).
 fn is_wrapped_class_attribute(attribute: &JSXAttributeItem<'_>, options: &JsFormatOptions) -> bool {
+    // With wrapping off, the cheapest check already decides it.
+    if options.wrap_class_names.is_none() {
+        return false;
+    }
     let JSXAttributeItem::Attribute(attr) = attribute else {
         return false;
     };
