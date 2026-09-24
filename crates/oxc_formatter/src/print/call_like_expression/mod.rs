@@ -27,7 +27,11 @@ impl<'a> FormatWrite<'a> for AstNode<'a, CallExpression<'a>> {
 
         // Check if this is a class-context function call (e.g., clsx, cn, tw)
         // for Tailwind sorting and/or class wrapping
-        let class_call_ctx = class_function_context(&self.callee, f.options());
+        let class_call_ctx = if f.context().has_class_features() {
+            class_function_context(&self.callee, f.options())
+        } else {
+            None
+        };
 
         // For nested non-class calls inside a class context, disable class handling
         // to prevent sorting strings inside the nested call's arguments.

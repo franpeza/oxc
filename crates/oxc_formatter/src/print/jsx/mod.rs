@@ -324,7 +324,11 @@ impl<'a> FormatWrite<'a> for AstNode<'a, JSXAttribute<'a>> {
         if let Some(value) = &self.value() {
             // Check if this is a class attribute (sort and/or wrap)
             // and push context. Extract context entry before mutating f
-            let class_ctx_to_push = class_attribute_context(&self.name, f.options());
+            let class_ctx_to_push = if f.context().has_class_features() {
+                class_attribute_context(&self.name, f.options())
+            } else {
+                None
+            };
 
             if let Some(ctx) = class_ctx_to_push {
                 f.context_mut().push_class_context(ctx);

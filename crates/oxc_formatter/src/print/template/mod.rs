@@ -107,7 +107,11 @@ impl<'a> FormatWrite<'a> for AstNode<'a, TaggedTemplateExpression<'a>> {
         // Check if this is a class-context tag (e.g., tw`flex p-4`) for
         // sorting and/or wrapping.
         // Extract context entry before mutating f
-        let class_ctx_to_push = class_function_context(&self.tag, f.options());
+        let class_ctx_to_push = if f.context().has_class_features() {
+            class_function_context(&self.tag, f.options())
+        } else {
+            None
+        };
 
         if let Some(ctx) = class_ctx_to_push {
             f.context_mut().push_class_context(ctx);
