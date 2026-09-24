@@ -138,6 +138,10 @@ pub struct JsFormatContext<'ast> {
     /// Set only for an embedded program (see [`crate::format_to_ir`]):
     /// its sole statement prints without its semicolon.
     embedding_omits_semicolon: bool,
+
+    /// Whether `sort_tailwindcss` or `wrap_class_names` is configured, computed
+    /// once so the nodes that could open a class context test a single `bool`.
+    has_class_features: bool,
 }
 
 impl std::fmt::Debug for JsFormatContext<'_> {
@@ -173,6 +177,8 @@ impl<'ast> JsFormatContext<'ast> {
         options: JsFormatOptions,
     ) -> Self {
         let source_text = SourceText::new(source_text);
+        let has_class_features =
+            options.sort_tailwindcss.is_some() || options.wrap_class_names.is_some();
         Self {
             options,
             source_text,
@@ -184,6 +190,7 @@ impl<'ast> JsFormatContext<'ast> {
             class_context_stack: Vec::new(),
             wrapped_class_indices: Vec::new(),
             embedding_omits_semicolon: false,
+            has_class_features,
         }
     }
 
@@ -298,6 +305,12 @@ impl<'ast> JsFormatContext<'ast> {
     /// Get a mutable reference to the current class context, if any.
     pub fn class_context_mut(&mut self) -> Option<&mut ClassContext> {
         self.class_context_stack.last_mut()
+    }
+
+    /// Whether any class feature (`sort_tailwindcss`, `wrap_class_names`) is on.
+    /// With both off, no node opens a class context.
+    pub fn has_class_features(&self) -> bool {
+        self.has_class_features
     }
 
     /// Marks the class at `index` as wrapping to the print width.
